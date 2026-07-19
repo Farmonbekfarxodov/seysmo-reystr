@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0f2a43;
+  --color-ink-soft: #4b5c72;
+  --color-ink-faint: #8996a8;
+  --color-sand: #b8863a;
+  --color-sand-dark: #8e6526;
+  --color-sand-tint: #f6ede0;
+  --color-paper: #fafaf8;
+  --color-surface: #ffffff;
+  --color-line: #e4e7ec;
+  --color-success: #2f7a4f;
+  --color-success-tint: #e8f4ec;
+  --color-warning: #b7791f;
+  --color-warning-tint: #faf1de;
+  --color-danger: #b3261e;
+  --color-danger-tint: #fbeae9;
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html,
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+/* Consistent, visible keyboard focus everywhere. */
+:focus-visible {
+  outline: 2px solid var(--color-sand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   Seismogram signature element: a static waveform trace with a subtle
+   draw-in animation on first paint. Disabled for prefers-reduced-motion.
+   ========================================================================== */
+.seismogram-path {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+  animation: seismogram-draw 1.8s ease-out forwards;
+}
+
+@keyframes seismogram-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seismogram-path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Skeleton loading shimmer for search-result cards. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-line);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: skeleton-shimmer 1.6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
