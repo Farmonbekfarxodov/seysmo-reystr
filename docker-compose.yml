@@ -23,15 +23,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      DEBUG: "True"
+      DEBUG: "${DEBUG:-True}"
       SECRET_KEY: dev-secret-key-change-me
-      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend,${SERVER_HOST:-localhost}
       DB_NAME: seismology_registry
       DB_USER: seismology_registry
       DB_PASSWORD: seismology_registry
       DB_HOST: db
       DB_PORT: "5432"
-      FRONTEND_ORIGIN: http://localhost:5173
+      FRONTEND_ORIGIN: http://${SERVER_HOST:-localhost}:5173
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
       DEFAULT_FROM_EMAIL: no-reply@seismology-institute.local
       ALLOWED_EMAIL_DOMAIN: ""
@@ -47,7 +47,7 @@ services:
     depends_on:
       - backend
     environment:
-      VITE_API_BASE_URL: http://localhost:8000/api
+      VITE_API_BASE_URL: http://${SERVER_HOST:-localhost}:8000/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
