@@ -32,8 +32,13 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       FRONTEND_ORIGIN: http://${SERVER_HOST:-localhost}:5173
-      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
-      DEFAULT_FROM_EMAIL: no-reply@seismology-institute.local
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@seismology-institute.local}
       ALLOWED_EMAIL_DOMAIN: ""
     volumes:
       - ./backend:/app
