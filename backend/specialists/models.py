@@ -43,8 +43,8 @@ def photo_upload_path(instance, filename):
 class SpecialistProfile(models.Model):
     class AcademicDegree(models.TextChoices):
         NONE = "none", "Yo'q"
-        BSc = "bachelor", "Bakalavr"
-        MSc = "master", "Magistr"
+        BSC = "bsc", "Bakalavr"
+        MSC = "msc", "Magistr"
         PHD = "phd", "PhD"
         DSC = "dsc", "DSc"
         CANDIDATE_LEGACY = "candidate_legacy", "Fan nomzodi"
