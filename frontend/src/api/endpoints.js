@@ -16,7 +16,6 @@ export const authApi = {
     form.append("department", payload.department);
     form.append("research_interests", payload.research_interests || "");
     if (payload.photo) form.append("photo", payload.photo);
-    (payload.documents || []).forEach((file) => form.append("documents", file));
     return api.post("/auth/register/", form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -48,24 +47,43 @@ export const specialistsApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  uploadDocument: (file) => {
-    const form = new FormData();
-    form.append("file", file);
-    return api.post("/specialists/me/documents/", form, {
+};
+
+function buildWorkFormData(payload) {
+  const form = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (key === "confirm_duplicate") {
+      form.append(key, value ? "true" : "false");
+      return;
+    }
+    form.append(key, value);
+  });
+  return form;
+}
+
+export const worksApi = {
+  listMine: ({ category, page, ordering, search } = {}) =>
+    api.get("/specialists/me/works/", { params: { category, page, ordering, search } }),
+  listPublic: (specialistId, { category, page, ordering } = {}) =>
+    api.get(`/specialists/${specialistId}/works/`, { params: { category, page, ordering } }),
+  create: (payload) =>
+    api.post("/specialists/me/works/", buildWorkFormData(payload), {
       headers: { "Content-Type": "multipart/form-data" },
-    });
-  },
-  deleteDocument: (id) => api.delete(`/specialists/me/documents/${id}/`),
+    }),
+  update: (id, payload) =>
+    api.patch(`/specialists/me/works/${id}/`, buildWorkFormData(payload), {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
+  delete: (id) => api.delete(`/specialists/me/works/${id}/`),
 };
 
 export const ACADEMIC_DEGREES = [
   { value: "none", label: "Yo'q" },
-  { value: "bsc", label: "Bakalavr" },
-  { value: "msc", label: "Magistr" },
   { value: "phd", label: "PhD" },
   { value: "dsc", label: "DSc" },
-  { value: "candidate_legacy", label: "Fan nomzodi" },
-  { value: "doctor_legacy", label: "Fan doktori" },
+  { value: "candidate_legacy", label: "Fan nomzodi (eski tizim)" },
+  { value: "doctor_legacy", label: "Fan doktori (eski tizim)" },
 ];
 
 export const ACADEMIC_TITLES = [
@@ -83,6 +101,44 @@ export const POSITIONS = [
   { value: "chief_researcher", label: "Bosh ilmiy xodim" },
   { value: "lab_head", label: "Laboratoriya mudiri" },
   { value: "department_head", label: "Bo'lim boshlig'i" },
+];
+
+// Tab order matters -- matches the spec exactly.
+export const WORK_CATEGORIES = [
+  { value: "foreign_article", tabLabel: "Xorijiy maqolalar", singularLabel: "Xorijiy maqola" },
+  { value: "local_article", tabLabel: "Mahalliy maqolalar", singularLabel: "Mahalliy maqola" },
+  { value: "thesis", tabLabel: "Tezislar", singularLabel: "Tezis" },
+  { value: "patent", tabLabel: "Patentlar", singularLabel: "Patent" },
+  { value: "monograph", tabLabel: "Monografiyalar", singularLabel: "Monografiya" },
+];
+
+export const AUTHORSHIP_OPTIONS = [
+  { value: "main_author", label: "Asosiy muallif" },
+  { value: "co_author", label: "Hammuallif" },
+];
+
+export const INDEX_TYPE_OPTIONS = [
+  { value: "scopus", label: "Scopus" },
+  { value: "wos", label: "Web of Science" },
+  { value: "scopus_wos", label: "Scopus & WoS" },
+  { value: "other_intl", label: "Boshqa xalqaro" },
+];
+
+export const THESIS_CATEGORY_OPTIONS = [
+  { value: "international_conf", label: "Xalqaro konferensiya" },
+  { value: "republic_conf", label: "Respublika konferensiyasi" },
+];
+
+export const PATENT_CATEGORY_OPTIONS = [
+  { value: "invention", label: "Ixtiro" },
+  { value: "utility_model", label: "Foydali model" },
+  { value: "industrial_design", label: "Sanoat namunasi" },
+  { value: "software_cert", label: "EHM dasturi guvohnomasi" },
+];
+
+export const PATENT_TYPE_OPTIONS = [
+  { value: "local", label: "Mahalliy" },
+  { value: "foreign", label: "Xorijiy" },
 ];
 
 /** DRF wraps validate()-raised dict errors so every leaf is an array.

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { specialistsApi } from "../api/endpoints";
+import PublicWorksSection from "../components/PublicWorksSection.jsx";
 import uz from "../i18n/uz.js";
 
 function initials(fullName) {
@@ -99,25 +100,7 @@ export default function SpecialistDetailPage() {
         )}
 
         <div className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-faint">{uz.detail.documents}</h2>
-          {specialist.documents && specialist.documents.length > 0 ? (
-            <ul className="mt-2 flex flex-col gap-2">
-              {specialist.documents.map((doc) => (
-                <li key={doc.id}>
-                  <a
-                    href={doc.file}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-line bg-paper px-3.5 py-2 text-sm text-sand-dark underline underline-offset-2 transition hover:border-sand"
-                  >
-                    {doc.original_filename}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-ink-faint">{uz.detail.noDocuments}</p>
-          )}
+          <PublicWorksSection specialistId={specialist.id} worksByCategory={specialist.works_by_category} />
         </div>
       </div>
     </div>

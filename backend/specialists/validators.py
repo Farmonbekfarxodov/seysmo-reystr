@@ -31,6 +31,15 @@ def validate_uploaded_document(f):
     if content_type and content_type not in settings.ALLOWED_DOCUMENT_MIME_TYPES:
         raise ValidationError(f"'{f.name}' fayli uchun ruxsat etilmagan content-type.")
 
+    # Genuine magic-byte check -- every real PDF starts with "%PDF-".
+    # Dependency-free (doesn't need the optional python-magic/libmagic
+    # package), and reliable since ALLOWED_DOCUMENT_EXTENSIONS is PDF-only.
+    f.seek(0)
+    header = f.read(5)
+    f.seek(0)
+    if header != b"%PDF-":
+        raise ValidationError(f"'{f.name}' fayli haqiqiy PDF faylga o'xshamaydi.")
+
     if magic is not None:
         head = f.read(2048)
         f.seek(0)

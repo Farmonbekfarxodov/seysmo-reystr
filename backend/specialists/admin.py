@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import Department, SpecialistDocument, SpecialistProfile
+from .models import Department, ScientificWork, SpecialistProfile
 
 
 @admin.register(Department)
@@ -15,11 +15,12 @@ class DepartmentAdmin(admin.ModelAdmin):
         return obj.specialists.count()
 
 
-class DocumentInline(admin.TabularInline):
-    model = SpecialistDocument
+class ScientificWorkInline(admin.TabularInline):
+    model = ScientificWork
     extra = 0
-    fields = ["original_filename", "file", "size", "uploaded_at"]
-    readonly_fields = ["original_filename", "file", "size", "uploaded_at"]
+    fields = ["category", "title", "year", "file"]
+    readonly_fields = ["title", "year", "file"]
+    show_change_link = True
 
 
 @admin.register(SpecialistProfile)
@@ -34,7 +35,7 @@ class SpecialistProfileAdmin(admin.ModelAdmin):
     ]
     list_filter = ["department", "academic_degree", "academic_title"]
     search_fields = ["user__email", "user__username", "user__last_name", "user__first_name"]
-    inlines = [DocumentInline]
+    inlines = [ScientificWorkInline]
     readonly_fields = ["photo_large_preview", "created_at", "updated_at"]
     fieldsets = (
         (None, {"fields": ("user", "photo", "photo_large_preview")}),
@@ -64,7 +65,9 @@ class SpecialistProfileAdmin(admin.ModelAdmin):
         return "Rasm yuklanmagan."
 
 
-@admin.register(SpecialistDocument)
-class SpecialistDocumentAdmin(admin.ModelAdmin):
-    list_display = ["original_filename", "specialist", "size", "uploaded_at"]
-    search_fields = ["original_filename", "specialist__user__email"]
+@admin.register(ScientificWork)
+class ScientificWorkAdmin(admin.ModelAdmin):
+    list_display = ["title", "category", "specialist", "year", "created_at"]
+    list_filter = ["category", "year"]
+    search_fields = ["title", "doi", "specialist__user__email", "specialist__user__last_name"]
+    readonly_fields = ["original_filename", "size", "created_at", "updated_at"]

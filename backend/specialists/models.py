@@ -30,9 +30,19 @@ class Department(models.Model):
 
 
 def document_upload_path(instance, filename):
+    """Kept only because the already-applied historical migration 0001
+    references this by dotted path (FileField.upload_to). Removing it would
+    break `migrate` on a fresh install replaying migration history, even
+    though the SpecialistDocument model itself is gone."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     unique_name = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
     return f"specialist_documents/{instance.specialist.user_id}/{unique_name}"
+
+
+def work_upload_path(instance, filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    unique_name = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    return f"scientific_works/{instance.specialist.user_id}/{unique_name}"
 
 
 def photo_upload_path(instance, filename):
@@ -43,12 +53,10 @@ def photo_upload_path(instance, filename):
 class SpecialistProfile(models.Model):
     class AcademicDegree(models.TextChoices):
         NONE = "none", "Yo'q"
-        BSC = "bsc", "Bakalavr"
-        MSC = "msc", "Magistr"
         PHD = "phd", "PhD"
         DSC = "dsc", "DSc"
-        CANDIDATE_LEGACY = "candidate_legacy", "Fan nomzodi"
-        DOCTOR_LEGACY = "doctor_legacy", "Fan doktori"
+        CANDIDATE_LEGACY = "candidate_legacy", "Fan nomzodi (eski tizim)"
+        DOCTOR_LEGACY = "doctor_legacy", "Fan doktori (eski tizim)"
 
     class AcademicTitle(models.TextChoices):
         NONE = "none", "Yo'q"
@@ -183,15 +191,83 @@ class SpecialistProfile(models.Model):
         self.photo_thumbnail.name = saved_thumb_name
 
 
-class SpecialistDocument(models.Model):
-    specialist = models.ForeignKey(SpecialistProfile, on_delete=models.CASCADE, related_name="documents")
-    file = models.FileField(upload_to=document_upload_path, validators=[validate_uploaded_document])
+class ScientificWork(models.Model):
+    """A single scientific work of any of the five categories. One table
+    for all categories (category-specific fields are blank when unused);
+    required-field enforcement per category lives in the serializer."""
+
+    class Category(models.TextChoices):
+        FOREIGN_ARTICLE = "foreign_article", "Xorijiy maqola"
+        LOCAL_ARTICLE = "local_article", "Mahalliy maqola"
+        THESIS = "thesis", "Tezis"
+        PATENT = "patent", "Patent"
+        MONOGRAPH = "monograph", "Monografiya"
+
+    class Authorship(models.TextChoices):
+        MAIN_AUTHOR = "main_author", "Asosiy muallif"
+        CO_AUTHOR = "co_author", "Hammuallif"
+
+    class IndexType(models.TextChoices):
+        SCOPUS = "scopus", "Scopus"
+        WOS = "wos", "Web of Science"
+        SCOPUS_WOS = "scopus_wos", "Scopus & WoS"
+        OTHER_INTL = "other_intl", "Boshqa xalqaro"
+
+    class ThesisCategory(models.TextChoices):
+        INTERNATIONAL_CONF = "international_conf", "Xalqaro konferensiya"
+        REPUBLIC_CONF = "republic_conf", "Respublika konferensiyasi"
+
+    class PatentCategory(models.TextChoices):
+        INVENTION = "invention", "Ixtiro"
+        UTILITY_MODEL = "utility_model", "Foydali model"
+        INDUSTRIAL_DESIGN = "industrial_design", "Sanoat namunasi"
+        SOFTWARE_CERT = "software_cert", "EHM dasturi guvohnomasi"
+
+    class PatentType(models.TextChoices):
+        LOCAL = "local", "Mahalliy"
+        FOREIGN = "foreign", "Xorijiy"
+
+    specialist = models.ForeignKey(SpecialistProfile, on_delete=models.CASCADE, related_name="works")
+    category = models.CharField(max_length=20, choices=Category.choices)
+
+    # Common fields
+    title = models.CharField(max_length=500)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    authorship = models.CharField(max_length=20, choices=Authorship.choices, blank=True)
+    project_name = models.CharField(max_length=255, blank=True)
+    link = models.URLField(max_length=500, blank=True)
+    doi = models.CharField(max_length=255, blank=True)
+
+    file = models.FileField(upload_to=work_upload_path, validators=[validate_uploaded_document])
     original_filename = models.CharField(max_length=255)
     size = models.PositiveIntegerField(help_text="File size in bytes")
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    # Foreign article (publisher is shared with monograph)
+    publisher = models.CharField(max_length=255, blank=True)
+    index_type = models.CharField(max_length=20, choices=IndexType.choices, blank=True)
+    impact_factor = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+
+    # Local article / thesis
+    journal_name = models.CharField(max_length=255, blank=True)
+
+    # Thesis
+    thesis_category = models.CharField(max_length=30, choices=ThesisCategory.choices, blank=True)
+
+    # Patent
+    patent_category = models.CharField(max_length=30, choices=PatentCategory.choices, blank=True)
+    patent_type = models.CharField(max_length=20, choices=PatentType.choices, blank=True)
+    certificate_number = models.CharField(max_length=100, blank=True)
+    issued_date = models.DateField(null=True, blank=True)
+
+    # Monograph
+    isbn = models.CharField(max_length=50, blank=True)
+    pages = models.PositiveIntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-uploaded_at"]
+        ordering = ["-year", "-created_at"]
 
     def __str__(self):
-        return self.original_filename
+        return f"{self.title} ({self.get_category_display()})"

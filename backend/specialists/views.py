@@ -1,24 +1,21 @@
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, parsers, permissions, status
-from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework import filters as drf_filters
+from rest_framework import generics, parsers, permissions
 
-from .filters import SpecialistFilter
-from .models import Department, SpecialistDocument, SpecialistProfile
+from .filters import ScientificWorkFilter, SpecialistFilter
+from .models import Department, ScientificWork, SpecialistProfile
 from .permissions import IsVerifiedSpecialist
 from .serializers import (
     DepartmentSerializer,
-    DocumentSerializer,
-    DocumentUploadSerializer,
     MySpecialistProfileSerializer,
+    ScientificWorkSerializer,
     SpecialistCardSerializer,
     SpecialistDetailSerializer,
 )
 
-PUBLIC_QUERYSET = SpecialistProfile.objects.select_related("user", "department").prefetch_related(
-    "documents"
-).filter(
+PUBLIC_QUERYSET = SpecialistProfile.objects.select_related("user", "department").filter(
     user__is_email_verified=True,
     user__is_active=True,
 )
@@ -39,7 +36,7 @@ class SpecialistSearchView(generics.ListAPIView):
     search. Every verified, active employee's profile is included -- there
     is no approval step and no visibility toggle."""
 
-    queryset = PUBLIC_QUERYSET
+    queryset = PUBLIC_QUERYSET.annotate(works_count=Count("works")).order_by("-created_at")
     serializer_class = SpecialistCardSerializer
     permission_classes = [permissions.AllowAny]
     filter_backends = [DjangoFilterBackend]
@@ -48,7 +45,7 @@ class SpecialistSearchView(generics.ListAPIView):
 
 
 class SpecialistDetailView(generics.RetrieveAPIView):
-    """GET /api/specialists/{id}/ — public profile, no email/username/docs."""
+    """GET /api/specialists/{id}/ — public profile, no email/username."""
 
     queryset = PUBLIC_QUERYSET
     serializer_class = SpecialistDetailSerializer
@@ -72,38 +69,69 @@ class MyProfileView(generics.RetrieveUpdateAPIView):
         return get_object_or_404(SpecialistProfile, user=self.request.user)
 
 
-class MyDocumentsView(APIView):
-    """POST /api/specialists/me/documents/ — upload a new article/document.
-    No count limit -- researchers may have many publications over time."""
+class SpecialistWorksPublicView(generics.ListAPIView):
+    """GET /api/specialists/{id}/works/?category=&page=&ordering= — a
+    specific (public, verified) employee's scientific works."""
 
+    serializer_class = ScientificWorkSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_class = ScientificWorkFilter
+    ordering_fields = ["year", "issued_date", "created_at"]
+    ordering = ["-year", "-created_at"]
+    throttle_scope = "public"
+
+    def get_queryset(self):
+        profile = get_object_or_404(PUBLIC_QUERYSET, user_id=self.kwargs["id"])
+        return ScientificWork.objects.filter(specialist=profile)
+
+
+class MyWorksListCreateView(generics.ListCreateAPIView):
+    """GET | POST /api/specialists/me/works/?category=&page=&ordering= —
+    list/create the logged-in employee's own scientific works. No count
+    limit; every category requires a PDF file on create."""
+
+    serializer_class = ScientificWorkSerializer
     permission_classes = [IsVerifiedSpecialist]
-    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    filter_backends = [DjangoFilterBackend, drf_filters.OrderingFilter]
+    filterset_class = ScientificWorkFilter
+    ordering_fields = ["year", "issued_date", "created_at"]
+    ordering = ["-year", "-created_at"]
 
-    def post(self, request):
-        profile = get_object_or_404(SpecialistProfile, user=request.user)
+    def get_profile(self):
+        return get_object_or_404(SpecialistProfile, user=self.request.user)
 
-        serializer = DocumentUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        uploaded = serializer.validated_data["file"]
+    def get_queryset(self):
+        return ScientificWork.objects.filter(specialist=self.get_profile())
 
-        document = SpecialistDocument.objects.create(
-            specialist=profile, file=uploaded, original_filename=uploaded.name, size=uploaded.size
-        )
-        return Response(
-            DocumentSerializer(document, context={"request": request}).data,
-            status=status.HTTP_201_CREATED,
-        )
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["specialist"] = self.get_profile()
+        return context
 
 
-class MyDocumentDeleteView(APIView):
-    """DELETE /api/specialists/me/documents/{id}/ — remove one of the
-    logged-in employee's own files."""
+class MyWorkDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """GET | PATCH | DELETE /api/specialists/me/works/{id}/ — a single own
+    work: edit metadata and/or replace the PDF (removal is not allowed),
+    or delete the whole record."""
 
+    serializer_class = ScientificWorkSerializer
     permission_classes = [IsVerifiedSpecialist]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    lookup_url_kwarg = "id"
 
-    def delete(self, request, id):
-        profile = get_object_or_404(SpecialistProfile, user=request.user)
-        document = get_object_or_404(SpecialistDocument, id=id, specialist=profile)
-        document.file.delete(save=False)
-        document.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def get_profile(self):
+        return get_object_or_404(SpecialistProfile, user=self.request.user)
+
+    def get_queryset(self):
+        return ScientificWork.objects.filter(specialist=self.get_profile())
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["specialist"] = self.get_profile()
+        return context
+
+    def perform_destroy(self, instance):
+        instance.file.delete(save=False)
+        instance.delete()

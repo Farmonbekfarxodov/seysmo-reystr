@@ -58,8 +58,6 @@ const uz = {
     selectPlaceholder: "Tanlang…",
     researchInterests: "Ilmiy qiziqishlar",
     bio: "Qisqacha ma'lumot",
-    documents: "Hujjatlar (diplom, sertifikat)",
-    documentsHint: "PDF, JPG yoki PNG · har biri 10 MB gacha · ko'pi bilan 5 ta fayl",
     submit: "Ro'yxatdan o'tish",
     submitting: "Yuborilmoqda…",
     verifyTitle: "Emailni tasdiqlang",
@@ -73,12 +71,8 @@ const uz = {
   },
   dashboard: {
     title: "Mening profilim",
-    subtitle: "Ochiq ma'lumotlaringizni tahrirlang va hujjatlaringizni boshqaring.",
+    subtitle: "Ochiq ma'lumotlaringizni tahrirlang va ilmiy ishlaringizni boshqaring.",
     profileSection: "Profil",
-    documentsSection: "Hujjatlar",
-    noDocuments: "Hali hujjat yuklanmagan.",
-    uploadNew: "Yangi hujjat yuklash (PDF)",
-    uploading: "Yuklanmoqda…",
     saved: "Profil yangilandi.",
   },
   detail: {
@@ -86,8 +80,6 @@ const uz = {
     backToSearch: "← Qidiruvga qaytish",
     researchInterests: "Ilmiy qiziqishlar",
     about: "Haqida",
-    documents: "Hujjatlar",
-    noDocuments: "Hozircha yuklangan hujjat yo'q.",
   },
   notFound: {
     title: "404",

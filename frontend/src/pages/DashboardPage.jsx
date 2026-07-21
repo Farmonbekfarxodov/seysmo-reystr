@@ -8,13 +8,8 @@ import {
   POSITIONS,
   specialistsApi,
 } from "../api/endpoints";
+import ScientificWorksManager from "../components/ScientificWorksManager.jsx";
 import uz from "../i18n/uz.js";
-
-function formatSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function initials(first, last) {
   return `${(first || "?").charAt(0)}${(last || "").charAt(0)}`.toUpperCase();
@@ -33,10 +28,6 @@ export default function DashboardPage() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const photoInputRef = useRef(null);
-
-  const [uploadError, setUploadError] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
 
   function loadProfile() {
     setLoading(true);
@@ -117,32 +108,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleUploadDocument(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadError(null);
-    setUploading(true);
-    try {
-      await specialistsApi.uploadDocument(file);
-      loadProfile();
-    } catch (err) {
-      const { fieldErrors, generic } = flattenApiErrors(err.response?.data);
-      setUploadError(fieldErrors.file || generic || "Yuklash muvaffaqiyatsiz tugadi.");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  async function handleDeleteDocument(docId) {
-    try {
-      await specialistsApi.deleteDocument(docId);
-      loadProfile();
-    } catch {
-      setUploadError("Faylni o'chirib bo'lmadi.");
-    }
-  }
-
   if (loading || !form) {
     return <div className="flex-1 py-24 text-center text-sm text-ink-faint">{uz.common.loading}</div>;
   }
@@ -154,7 +119,7 @@ export default function DashboardPage() {
   const currentPhotoSrc = photoPreview || (photoAction !== "remove" ? profile.photo_thumbnail : null);
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-6 px-5 py-12 lg:grid-cols-[1.1fr_0.9fr]">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-5 py-12">
       <div className="rounded-2xl border border-line bg-surface p-7 shadow-sm shadow-ink/5">
         <h2 className="mb-1 text-lg font-semibold text-ink">{uz.dashboard.profileSection}</h2>
         <p className="mb-5 text-sm text-ink-faint">{uz.dashboard.subtitle}</p>
@@ -259,58 +224,7 @@ export default function DashboardPage() {
         </form>
       </div>
 
-      <div className="h-fit rounded-2xl border border-line bg-surface p-7 shadow-sm shadow-ink/5">
-        <h2 className="mb-4 text-lg font-semibold text-ink">{uz.dashboard.documentsSection}</h2>
-        {uploadError && (
-          <div className="mb-4 rounded-lg border border-danger/30 bg-danger-tint px-3 py-2.5 text-sm text-danger">
-            {uploadError}
-          </div>
-        )}
-
-        {profile.documents.length === 0 ? (
-          <p className="text-sm text-ink-faint">{uz.dashboard.noDocuments}</p>
-        ) : (
-          <div className="divide-y divide-line">
-            {profile.documents.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <a
-                    href={doc.file}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate text-sm font-medium text-sand-dark underline underline-offset-2"
-                  >
-                    {doc.original_filename}
-                  </a>
-                  <p className="text-xs text-ink-faint">
-                    {formatSize(doc.size)} · {new Date(doc.uploaded_at).toLocaleDateString("uz-UZ")}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeleteDocument(doc.id)}
-                  className="shrink-0 rounded-lg border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-tint"
-                >
-                  {uz.common.delete}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <hr className="my-5 border-line" />
-
-        <label className="block cursor-pointer rounded-lg border border-dashed border-line bg-paper px-4 py-3.5 text-center text-sm text-ink-soft transition hover:border-sand">
-          {uploading ? uz.dashboard.uploading : uz.dashboard.uploadNew}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            onChange={handleUploadDocument}
-            disabled={uploading}
-            className="hidden"
-          />
-        </label>
-      </div>
+      <ScientificWorksManager />
     </div>
   );
 }

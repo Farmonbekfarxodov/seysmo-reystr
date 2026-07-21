@@ -38,6 +38,9 @@ export default function SpecialistCard({ specialist }) {
         <span className="mt-2 inline-block rounded-full bg-sand-tint px-2.5 py-1 text-xs font-medium text-sand-dark">
           {specialist.department}
         </span>
+        <p className="mt-2 text-xs text-ink-faint">
+          {specialist.works_count || 0} ta ilmiy ish
+        </p>
       </div>
     </article>
   );

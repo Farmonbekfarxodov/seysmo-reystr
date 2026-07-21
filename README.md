@@ -32,17 +32,35 @@ seismology-staff-registry/
     moderation-related list filters/fields for `SpecialistProfile`.
 - **Department is a real dropdown**, admin-managed — not free text.
 - `research_interests` is collected at registration; `bio` is dashboard-only.
-- **Documents are researchers' published articles, not just credential
-  files.** Upload is (a) dashboard-only, never at registration (enforced on
-  both frontend and backend), (b) PDF-only for security, (c) unlimited in
-  count, and (d) shown on the **public** detail page (with download links)
-  for every verified employee — this deliberately overrides the original
-  "never expose raw documents" idea, since these files are meant to be
+- **Scientific works replace the old flat document list.** Every employee's
+  publications live in one `ScientificWork` table across five categories
+  (foreign articles, local articles, theses, patents, monographs), each
+  with its own required/optional fields. A PDF is **required on every
+  record in every category**, is **dashboard-only** to upload (never at
+  registration), and once a profile is public (i.e. the account is
+  verified), all of that employee's works — including the PDF download
+  links — are public too. This deliberately overrides the original "never
+  expose raw documents" idea, since these files are meant to be
   discoverable, not just credentials for review.
+  - **Old `SpecialistDocument` rows were migrated**, not discarded: each
+    became a `local_article` with `title` = the original filename
+    (extension stripped) and `year` = the upload year — both are editable
+    afterward. See `specialists/migrations/0003_migrate_documents_to_works.py`.
+  - **File replace-only, no removal**: `PATCH` can swap the PDF, but a work
+    can never end up without one.
+  - **DOI duplicates** are a soft, confirmable warning (not a hard block)
+    scoped per employee — two different employees may share a DOI freely.
+  - **PDF validation** now includes a real `%PDF-` magic-byte check
+    (dependency-free), catching a `.docx` renamed to `.pdf`.
+  - Implemented optional enhancements: a **per-category summary** (total
+    count) at the top of the dashboard's works section, and a **project-name
+    autocomplete** (datalist, sourced from the employee's own prior
+    entries). Listed as future work: DOI autofill via the Crossref API, and
+    Excel export.
 - Implemented optional enhancement: **`ALLOWED_EMAIL_DOMAIN`** (restrict
   registration to a corporate domain). Not implemented (listed as future
   work below): ORCID/Scholar/Scopus + publications list, a "Bo'limlar"
-  browse page, a language switcher, and Excel export.
+  browse page, and a language switcher.
 - **State management: React Context**, not Redux Toolkit — the shared state
   (session + which modal is open) is small enough that Context avoids extra
   dependency weight without losing anything at this scale.
@@ -161,6 +179,23 @@ npm run dev                                     # http://localhost:5173
 |---|---|
 | `VITE_API_BASE_URL` | `http://localhost:8000/api` |
 
+## Upgrading an existing deployment
+
+If you already have a running instance with employees who uploaded
+documents under the old flat-list system, upgrading is just a normal
+migration — **no manual data steps needed**:
+
+```bash
+git pull
+docker compose up -d --build      # or: python manage.py migrate  (without Docker)
+```
+
+Migrations `0002` → `0004` run automatically in order: create the new
+`ScientificWork` table, copy every old document into it as a
+`local_article` (title = old filename, year = old upload year, same PDF
+file — nothing is re-uploaded or lost), then drop the old table. This exact
+sequence was tested against simulated production data before release.
+
 ## How email verification works in development
 
 `EMAIL_BACKEND` defaults to Django's **console backend** — the verification
@@ -196,10 +231,14 @@ Covers: registration + verification (inactive → active/verified), login
 (username, email, wrong password, unverified blocked), public search
 (no auth required, name/department filters, unverified accounts never
 appear, verified accounts appear regardless of the legacy `is_public`/
-`moderation_status` column values), public detail (never exposes
-email/username; uploaded documents ARE public), and document upload
-(PDF-only, no count cap, dashboard-only — the register endpoint rejects
-any `documents` field).
+`moderation_status` column values, cards include `works_count`), public
+detail (never exposes email/username; includes `works_count` and
+`works_by_category`), and scientific works (per-category required-field
+validation, PDF-only + magic-byte enforcement, no count cap, file
+replace-only on update, ownership isolation between employees, DOI
+duplicate warning + confirm override, DOI reuse allowed across different
+employees, public works endpoint scoped to verified employees with
+category filtering).
 
 ---
 
@@ -210,24 +249,34 @@ All endpoints are prefixed with `/api/`.
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/departments/` | Public | dropdown source |
-| GET | `/specialists/?name=&department=&page=` | Public (60/min) | every verified, active employee |
-| GET | `/specialists/{id}/` | Public (60/min) | same |
-| POST | `/auth/register/` | Public | multipart, one request (incl. photo; documents are dashboard-only) |
+| GET | `/specialists/?name=&department=&page=` | Public (60/min) | every verified, active employee; cards include `works_count` |
+| GET | `/specialists/{id}/` | Public (60/min) | includes `works_count` + `works_by_category` |
+| GET | `/specialists/{id}/works/?category=&page=&ordering=` | Public (60/min) | a specific verified employee's works |
+| POST | `/auth/register/` | Public | multipart, one request (incl. photo; works are dashboard-only) |
 | POST | `/auth/verify-email/` | Public | `{email, code}` |
 | POST | `/auth/resend-code/` | Public | 60s cooldown, 5/hour |
 | POST | `/auth/login/` | Public | `{login, password}` → JWT |
 | POST | `/auth/refresh/` | Public | `{refresh}` → new access |
 | GET | `/me/` | JWT | basic account info |
 | GET/PATCH | `/specialists/me/` | JWT, verified | own profile, photo replace/remove |
-| POST | `/specialists/me/documents/` | JWT, verified | one PDF/request, unlimited count |
-| DELETE | `/specialists/me/documents/{id}/` | JWT, verified | own file only |
+| GET/POST | `/specialists/me/works/?category=&page=&ordering=` | JWT, verified | list/create own works, no count cap |
+| GET/PATCH/DELETE | `/specialists/me/works/{id}/` | JWT, verified | edit (incl. PDF replace) or delete a single work |
 
-## Future work (per section 10 of the original spec)
+**`ScientificWork` categories** (`category` field): `foreign_article`,
+`local_article`, `thesis`, `patent`, `monograph`. Required fields differ per
+category — see `specialists/serializers.py::ScientificWorkSerializer.CATEGORY_REQUIRED_FIELDS`.
+A PDF file is required on create for every category; `PATCH` can replace it
+but never remove it. A same-employee DOI duplicate returns
+`{"code": "duplicate_doi", ...}` (400) unless the request also includes
+`confirm_duplicate=true`.
 
-- ORCID / Google Scholar / Scopus links + a publications list on the profile.
+## Future work (per section 10 of the seismology spec, and the scientific-works change request)
+
+- ORCID / Google Scholar / Scopus links + a general publications list on the profile.
 - A "Bo'limlar" browse page listing departments with their staff.
 - Language switcher (uz / ru / en) — the `i18n/uz.js` structure is ready for it.
-- Admin action to export the staff list to Excel (openpyxl).
+- "DOI orqali to'ldirish" auto-fill on the foreign/local article form via the Crossref API.
+- Admin export of all scientific works to Excel with a category column (openpyxl).
 
 ---
 
@@ -237,22 +286,30 @@ All endpoints are prefixed with `/api/`.
    search console (name + department), logo top-left, Kirish/Ro'yxatdan
    o'tish top-right.
 2. Search by name and separately by department — results filter correctly
-   without logging in.
-3. Click a result card → `/specialists/:id` shows photo, degree/title/position,
-   department, research interests, bio, and any uploaded documents (as
-   download links) — no email/username visible.
-4. Click **"Ro'yxatdan o'tish"** → modal opens over the home page. Fill the
-   form, attach a photo (see the live circular preview), submit.
-5. Modal advances to the code step — check the backend console for the
-   6-digit code, enter it → success screen.
-6. Search for that employee's name **immediately** — they already appear,
-   no admin action needed.
-7. Click **"Kirish"**, log in with the new account → redirected to
-   `/dashboard`.
-8. Edit the profile and replace the photo (upload a new one, see the
-   preview swap); save — confirm the change persists on reload.
-9. Upload a PDF document from the dashboard, confirm it's PDF-only (try a
-   non-PDF file, see it rejected), then delete it.
-10. Visit that employee's public detail page again — the uploaded document
-    appears there too.
-11. Visit a nonsense URL like `/foo/bar` → the 404 page.
+   without logging in; each card shows a total works count (e.g. "0 ta
+   ilmiy ish" for a brand-new account).
+3. Register a new employee, verify the email code, log in → `/dashboard`.
+4. In **"Ilmiy ishlarim"**, add one record in each of the five categories
+   (Xorijiy maqolalar, Mahalliy maqolalar, Tezislar, Patentlar,
+   Monografiyalar) with a PDF attached each time — confirm the per-tab
+   counts update immediately after each save.
+5. Try saving a record **without** a PDF — confirm the "PDF fayl yuklash
+   majburiy" error. Try a required text field left blank (e.g. a local
+   article with no journal name) — confirm the field-level Uzbek error.
+6. Click a sortable column header (e.g. "Yili") — confirm the sort order
+   toggles; for Patentlar, confirm "Berilgan yili" displays as DD.MM.YYYY.
+7. Edit one record's metadata without touching the file — confirm the PDF
+   is unchanged. Edit another and replace its PDF — confirm the new file
+   downloads correctly afterward.
+8. Enter a DOI that already exists on one of your own records — confirm
+   the "Bu DOI bilan yozuv allaqachon mavjud" confirm dialog appears, and
+   that confirming saves it anyway.
+9. Delete one record (confirm dialog) — confirm it disappears and the tab
+   count decrements.
+10. Open that employee's public profile (`/specialists/:id`) — confirm the
+    same five tabs appear (only non-empty ones), same columns minus
+    "Amallar", and every row's PDF downloads. Confirm no email/username is
+    visible anywhere.
+11. Back on the home page, search for that employee again — the card's
+    total works count now reflects everything you added.
+12. Visit a nonsense URL like `/foo/bar` → the 404 page.
