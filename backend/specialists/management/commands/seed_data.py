@@ -10,6 +10,7 @@ DEPARTMENTS = [
     "Muhandislik seysmologiyasi laboratoriyasi",
     "Seysmik xavf laboratoriyasi",
     "Zamonaviy geodinamika laboratoriyasi",
+    "Yangibozor tajriba-sinov observatoriyasi laboratoriyasi",  
 ]
 
 

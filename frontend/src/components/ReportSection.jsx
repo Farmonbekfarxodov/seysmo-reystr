@@ -1,49 +1,24 @@
 import React, { useEffect, useState } from "react";
 
 import { downloadBlob, reportsApi } from "../api/endpoints";
+import LineDrilldownModal from "./LineDrilldownModal.jsx";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR - i);
 
-function DrilldownModal({ code, year, onClose }) {
-  const [rows, setRows] = useState(null);
-
-  useEffect(() => {
-    reportsApi.drilldown(code, year).then((res) => setRows(res.data.results));
-  }, [code, year]);
-
+function CountButton({ count, onClick, label }) {
+  if (!count) {
+    return <span className="text-ink-faint">0</span>;
+  }
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="rounded font-semibold text-sand-dark underline underline-offset-2 transition hover:text-sand focus-visible:outline focus-visible:outline-2 focus-visible:outline-sand"
     >
-      <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-ink">{code}-band ostidagi yozuvlar</h3>
-          <button onClick={onClose} className="text-2xl text-ink-faint hover:text-ink">
-            ×
-          </button>
-        </div>
-        {rows === null ? (
-          <p className="text-sm text-ink-faint">Yuklanmoqda…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-ink-faint">Yozuvlar topilmadi.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {rows.map((r) => (
-              <li key={r.id} className="rounded-lg border border-line bg-paper px-3.5 py-2.5 text-sm">
-                <p className="font-medium text-ink">{r.title}</p>
-                <p className="text-xs text-ink-faint">
-                  {r.category_display} · {r.year || ""} {r.doi && `· DOI: ${r.doi}`}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+      {count}
+    </button>
   );
 }
 
@@ -52,7 +27,7 @@ export default function ReportSection() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [drilldown, setDrilldown] = useState(null); // { code }
+  const [drilldown, setDrilldown] = useState(null); // { code, label }
 
   useEffect(() => {
     setLoading(true);
@@ -141,17 +116,11 @@ export default function ReportSection() {
                         <td className="w-16 py-2 pr-3 font-mono text-xs">{line.code}</td>
                         <td className={`py-2 pr-3 ${line.is_subset ? "pl-6 italic" : ""}`}>{line.label}</td>
                         <td className="w-16 py-2 text-right">
-                          {line.count > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => setDrilldown({ code: line.code })}
-                              className="font-semibold text-sand-dark underline underline-offset-2"
-                            >
-                              {line.count}
-                            </button>
-                          ) : (
-                            <span className="text-ink-faint">0</span>
-                          )}
+                          <CountButton
+                            count={line.count}
+                            label={`${line.code} — ${line.count} ta yozuv`}
+                            onClick={() => setDrilldown({ code: line.code, label: `${line.code} — ${line.label}` })}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -163,7 +132,17 @@ export default function ReportSection() {
                               <p className="mb-1 font-semibold text-ink-soft">Scopus</p>
                               {["Q1", "Q2", "Q3", "Q4"].map((q) => (
                                 <span key={q} className="mr-3">
-                                  {q}: {report.quartile_matrix.scopus[q]}
+                                  {q}:{" "}
+                                  <CountButton
+                                    count={report.quartile_matrix.scopus[q]}
+                                    label={`Scopus ${q} — ${report.quartile_matrix.scopus[q]} ta yozuv`}
+                                    onClick={() =>
+                                      setDrilldown({
+                                        code: `2.1:scopus:${q}`,
+                                        label: `2.1 — Scopus ${q}`,
+                                      })
+                                    }
+                                  />
                                 </span>
                               ))}
                             </div>
@@ -171,7 +150,17 @@ export default function ReportSection() {
                               <p className="mb-1 font-semibold text-ink-soft">Web of Science</p>
                               {["Q1", "Q2", "Q3", "Q4"].map((q) => (
                                 <span key={q} className="mr-3">
-                                  {q}: {report.quartile_matrix.wos[q]}
+                                  {q}:{" "}
+                                  <CountButton
+                                    count={report.quartile_matrix.wos[q]}
+                                    label={`Web of Science ${q} — ${report.quartile_matrix.wos[q]} ta yozuv`}
+                                    onClick={() =>
+                                      setDrilldown({
+                                        code: `2.1:wos:${q}`,
+                                        label: `2.1 — Web of Science ${q}`,
+                                      })
+                                    }
+                                  />
                                 </span>
                               ))}
                             </div>
@@ -183,7 +172,15 @@ export default function ReportSection() {
                       <td colSpan={2} className="py-2 pl-2">
                         Jami:
                       </td>
-                      <td className="py-2 pr-2 text-right">{section.total}</td>
+                      <td className="py-2 pr-2 text-right">
+                        <CountButton
+                          count={section.total}
+                          label={`${section.id}-bo'lim jami — ${section.total} ta yozuv`}
+                          onClick={() =>
+                            setDrilldown({ code: section.id, label: `${section.id}. ${section.title} — Jami` })
+                          }
+                        />
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -194,7 +191,13 @@ export default function ReportSection() {
       )}
 
       {drilldown && (
-        <DrilldownModal code={drilldown.code} year={year} onClose={() => setDrilldown(null)} />
+        <LineDrilldownModal
+          scope="me"
+          code={drilldown.code}
+          label={drilldown.label}
+          year={year}
+          onClose={() => setDrilldown(null)}
+        />
       )}
     </div>
   );

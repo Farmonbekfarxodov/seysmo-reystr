@@ -130,6 +130,7 @@ REST_FRAMEWORK = {
         "auth-register": "5/min",
         "auth-resend-code": "10/min",  # fine-grained 60s/5-per-hour checks happen in the view
         "auth-verify": "10/min",
+        "report-zip": "10/min",
     },
 }
 

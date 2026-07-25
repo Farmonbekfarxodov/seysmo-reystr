@@ -247,3 +247,78 @@ def deduplicate_works(works):
     deduped = [members[0] for members in groups.values()]
     merged_groups = [members for members in groups.values() if len(members) > 1]
     return deduped, merged_groups
+
+
+def deduplicate_works_full(works):
+    """Like deduplicate_works, but returns (deduped_list, groups_by_id)
+    where groups_by_id maps EVERY representative's pk to its full member
+    list (including groups of 1) -- needed to show every co-author on a
+    deduplicated line's drill-down row, not just the flagged duplicates."""
+    groups = defaultdict(list)
+    for w in works:
+        groups[dedup_key(w)].append(w)
+
+    deduped = [members[0] for members in groups.values()]
+    groups_by_id = {members[0].pk: members for members in groups.values()}
+    return deduped, groups_by_id
+
+
+# ---------------------------------------------------------------------------
+# Drill-down: the exact records behind one report line / quartile cell /
+# section total. MUST stay in lockstep with build_report()'s counting so a
+# modal's row count always equals the number shown on the report.
+# ---------------------------------------------------------------------------
+
+_SECTION_TOTAL_EXPANDED_CODES = {
+    section["id"]: {c for code in section["total_codes"] for c in (["3.4.1", "3.4.2"] if code == "3.4" else [code])}
+    for section in REPORT_STRUCTURE
+}
+
+
+def resolve_line_records(works, code):
+    """works: already-scoped (and, for institute reports, already
+    deduplicated) list of ScientificWork instances -- the same list
+    passed to build_report(). code: a leaf report_code ("2.1"), the
+    combined local-conference code ("3.4"), a subset code ("5.2"/"5.4"),
+    a quartile-qualified article code ("2.1:scopus:Q1"), or a section id
+    for its "Jami" total ("II".."VI")."""
+    works = list(works)
+
+    if code in _SECTION_TOTAL_EXPANDED_CODES:
+        expanded = _SECTION_TOTAL_EXPANDED_CODES[code]
+        return [w for w in works if w.report_code in expanded]
+
+    if ":" in code:
+        base, db, quartile = code.split(":")
+        field = "scopus_quartile" if db == "scopus" else "wos_quartile"
+        indexed_values = ("scopus", "both") if db == "scopus" else ("wos", "both")
+        return [
+            w for w in works
+            if w.report_code == base and w.indexed_in in indexed_values and getattr(w, field) == quartile
+        ]
+
+    if code == "3.4":
+        return [w for w in works if w.report_code in ("3.4.1", "3.4.2")]
+
+    if code == "5.2":
+        return [w for w in works if w.report_code == "5.1" and w.published_abroad]
+
+    if code == "5.4":
+        return [w for w in works if w.report_code == "5.3" and w.published_abroad]
+
+    return [w for w in works if w.report_code == code]
+
+
+def line_label(code):
+    """Human label for a modal header, e.g. "2.1", "V", "2.1:scopus:Q1"."""
+    for section in REPORT_STRUCTURE:
+        if section["id"] == code:
+            return f"{code}. {section['title']} — Jami"
+        for line in section["lines"]:
+            if line["code"] == code:
+                return f"{code} — {line['label']}"
+    if ":" in code:
+        base, db, quartile = code.split(":")
+        db_label = "Scopus" if db == "scopus" else "Web of Science"
+        return f"{base} — {db_label} {quartile}"
+    return code

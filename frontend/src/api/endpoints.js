@@ -183,10 +183,18 @@ export const reportsApi = {
   me: ({ year, date_from, date_to } = {}) =>
     api.get("/reports/me/", { params: { year, date_from, date_to } }),
   drilldown: (code, year) => api.get("/reports/me/drilldown/", { params: { code, year } }),
+  line: ({ code, year, date_from, date_to } = {}) =>
+    api.get("/reports/me/line/", { params: { code, year, date_from, date_to } }),
+  lineZip: ({ code, year } = {}) =>
+    api.get("/reports/me/line/zip/", { params: { code, year }, responseType: "blob" }),
   exportMe: ({ year } = {}) =>
     api.get("/reports/me/export/", { params: { year }, responseType: "blob" }),
   institute: ({ year, department, employee } = {}) =>
     api.get("/reports/institute/", { params: { year, department, employee } }),
+  instituteLine: ({ code, year, department, employee } = {}) =>
+    api.get("/reports/institute/line/", { params: { code, year, department, employee } }),
+  instituteLineZip: ({ code, year, department } = {}) =>
+    api.get("/reports/institute/line/zip/", { params: { code, year, department }, responseType: "blob" }),
   exportInstitute: ({ year, department } = {}) =>
     api.get("/reports/institute/export/", { params: { year, department }, responseType: "blob" }),
 };
