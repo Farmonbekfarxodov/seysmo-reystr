@@ -80,10 +80,12 @@ export const worksApi = {
 
 export const ACADEMIC_DEGREES = [
   { value: "none", label: "Yo'q" },
+  { value: "bachelor", label: "Bakalavr" },
+  { value: "master", label: "Magistr" },
   { value: "phd", label: "PhD" },
   { value: "dsc", label: "DSc" },
-  { value: "candidate_legacy", label: "Fan nomzodi (eski tizim)" },
-  { value: "doctor_legacy", label: "Fan doktori (eski tizim)" },
+  { value: "candidate_legacy", label: "Fan nomzodi" },
+  { value: "doctor_legacy", label: "Fan doktori" },
 ];
 
 export const ACADEMIC_TITLES = [
@@ -104,12 +106,14 @@ export const POSITIONS = [
 ];
 
 // Tab order matters -- matches the spec exactly.
+// Tab order follows the official report structure (II-VI).
 export const WORK_CATEGORIES = [
   { value: "foreign_article", tabLabel: "Xorijiy maqolalar", singularLabel: "Xorijiy maqola" },
   { value: "local_article", tabLabel: "Mahalliy maqolalar", singularLabel: "Mahalliy maqola" },
   { value: "thesis", tabLabel: "Tezislar", singularLabel: "Tezis" },
+  { value: "conference_participation", tabLabel: "Anjumanda ishtirok", singularLabel: "Anjumanda ishtirok" },
   { value: "patent", tabLabel: "Patentlar", singularLabel: "Patent" },
-  { value: "monograph", tabLabel: "Monografiyalar", singularLabel: "Monografiya" },
+  { value: "other_publication", tabLabel: "Boshqa nashrlar", singularLabel: "Boshqa nashr" },
 ];
 
 export const AUTHORSHIP_OPTIONS = [
@@ -117,32 +121,87 @@ export const AUTHORSHIP_OPTIONS = [
   { value: "co_author", label: "Hammuallif" },
 ];
 
-export const INDEX_TYPE_OPTIONS = [
-  { value: "scopus", label: "Scopus" },
-  { value: "wos", label: "Web of Science" },
-  { value: "scopus_wos", label: "Scopus & WoS" },
-  { value: "other_intl", label: "Boshqa xalqaro" },
+export const JOURNAL_SCOPE_OPTIONS = [
+  { value: "scopus_wos", label: "Scopus va/yoki Web of Science bazasiga kiritilgan" },
+  { value: "other_foreign", label: "Boshqa xorijiy jurnal" },
+  { value: "cis", label: "MDH jurnali" },
+  { value: "local", label: "Mahalliy jurnal" },
 ];
 
-export const THESIS_CATEGORY_OPTIONS = [
-  { value: "international_conf", label: "Xalqaro konferensiya" },
-  { value: "republic_conf", label: "Respublika konferensiyasi" },
+export const INDEXED_IN_OPTIONS = [
+  { value: "scopus", label: "Scopus" },
+  { value: "wos", label: "Web of Science" },
+  { value: "both", label: "Scopus va Web of Science" },
+];
+
+export const QUARTILE_OPTIONS = [
+  { value: "Q1", label: "Q1" },
+  { value: "Q2", label: "Q2" },
+  { value: "Q3", label: "Q3" },
+  { value: "Q4", label: "Q4" },
+];
+
+export const CONFERENCE_SCOPE_OPTIONS = [
+  { value: "scopus_wos", label: "Scopus/WoS to'plami" },
+  { value: "other_foreign", label: "Boshqa xorijiy anjuman" },
+  { value: "cis", label: "MDH anjumani" },
+  { value: "local", label: "Mahalliy anjuman" },
+];
+
+export const LOCAL_CONF_LEVEL_OPTIONS = [
+  { value: "international", label: "Xalqaro anjuman" },
+  { value: "republic", label: "Respublika anjumani" },
+];
+
+export const PRESENTATION_TYPE_OPTIONS = [
+  { value: "oral", label: "Og'zaki" },
+  { value: "plenary", label: "Plenar" },
+];
+
+export const PARTICIPATION_SCOPE_OPTIONS = [
+  { value: "foreign", label: "Xorijiy" },
+  { value: "republic", label: "Respublika" },
+];
+
+export const PUBLICATION_TYPE_OPTIONS = [
+  { value: "monograph", label: "Monografiya" },
+  { value: "textbook", label: "Darslik" },
+  { value: "manual", label: "O'quv qo'llanma" },
 ];
 
 export const PATENT_CATEGORY_OPTIONS = [
-  { value: "invention", label: "Ixtiro" },
-  { value: "utility_model", label: "Foydali model" },
-  { value: "industrial_design", label: "Sanoat namunasi" },
-  { value: "software_cert", label: "EHM dasturi guvohnomasi" },
+  { value: "invention", label: "Ixtiro (patent)" },
+  { value: "foreign_patent", label: "Xorijiy patent" },
+  { value: "utility_model", label: "Foydali modelga patent" },
+  { value: "patent_application", label: "Patent uchun talabnoma" },
+  { value: "trademark", label: "Tovar belgisi" },
+  { value: "software_certificate", label: "Dasturiy mahsulot guvohnomasi" },
+  { value: "license_agreement", label: "Litsenziya shartnomasi" },
 ];
 
-export const PATENT_TYPE_OPTIONS = [
-  { value: "local", label: "Mahalliy" },
-  { value: "foreign", label: "Xorijiy" },
-];
+export const reportsApi = {
+  me: ({ year, date_from, date_to } = {}) =>
+    api.get("/reports/me/", { params: { year, date_from, date_to } }),
+  drilldown: (code, year) => api.get("/reports/me/drilldown/", { params: { code, year } }),
+  exportMe: ({ year } = {}) =>
+    api.get("/reports/me/export/", { params: { year }, responseType: "blob" }),
+  institute: ({ year, department, employee } = {}) =>
+    api.get("/reports/institute/", { params: { year, department, employee } }),
+  exportInstitute: ({ year, department } = {}) =>
+    api.get("/reports/institute/export/", { params: { year, department }, responseType: "blob" }),
+};
 
-/** DRF wraps validate()-raised dict errors so every leaf is an array.
- * This pulls out a flat { field: "message" } map plus a top-level string. */
+export function downloadBlob(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export function flattenApiErrors(data) {
   if (!data || typeof data !== "object") return { fieldErrors: {}, generic: null };
   const fieldErrors = {};

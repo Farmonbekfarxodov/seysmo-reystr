@@ -53,10 +53,12 @@ def photo_upload_path(instance, filename):
 class SpecialistProfile(models.Model):
     class AcademicDegree(models.TextChoices):
         NONE = "none", "Yo'q"
+        BACHELOR = "bachelor", "Bakalavr"
+        MASTER = "master", "Magistr"
         PHD = "phd", "PhD"
         DSC = "dsc", "DSc"
-        CANDIDATE_LEGACY = "candidate_legacy", "Fan nomzodi (eski tizim)"
-        DOCTOR_LEGACY = "doctor_legacy", "Fan doktori (eski tizim)"
+        CANDIDATE_LEGACY = "candidate_legacy", "Fan nomzodi"
+        DOCTOR_LEGACY = "doctor_legacy", "Fan doktori"
 
     class AcademicTitle(models.TextChoices):
         NONE = "none", "Yo'q"
@@ -192,43 +194,83 @@ class SpecialistProfile(models.Model):
 
 
 class ScientificWork(models.Model):
-    """A single scientific work of any of the five categories. One table
+    """A single scientific work of any of the six categories. One table
     for all categories (category-specific fields are blank when unused);
-    required-field enforcement per category lives in the serializer."""
+    required-field enforcement per category lives in the serializer.
+
+    Every record maps to exactly one official annual-report line via
+    `report_code` (see specialists/report_codes.py), recomputed on every
+    save and backfillable via the `recalc_report_codes` management command.
+    """
 
     class Category(models.TextChoices):
         FOREIGN_ARTICLE = "foreign_article", "Xorijiy maqola"
         LOCAL_ARTICLE = "local_article", "Mahalliy maqola"
         THESIS = "thesis", "Tezis"
+        CONFERENCE_PARTICIPATION = "conference_participation", "Anjumanda ishtirok"
         PATENT = "patent", "Patent"
-        MONOGRAPH = "monograph", "Monografiya"
+        OTHER_PUBLICATION = "other_publication", "Boshqa nashr"
 
     class Authorship(models.TextChoices):
         MAIN_AUTHOR = "main_author", "Asosiy muallif"
         CO_AUTHOR = "co_author", "Hammuallif"
 
-    class IndexType(models.TextChoices):
+    # --- Articles (report section II) --------------------------------
+    class JournalScope(models.TextChoices):
+        SCOPUS_WOS = "scopus_wos", "Scopus va/yoki Web of Science bazasiga kiritilgan"
+        OTHER_FOREIGN = "other_foreign", "Boshqa xorijiy jurnal"
+        CIS = "cis", "MDH jurnali"
+        LOCAL = "local", "Mahalliy jurnal"
+
+    class IndexedIn(models.TextChoices):
         SCOPUS = "scopus", "Scopus"
         WOS = "wos", "Web of Science"
-        SCOPUS_WOS = "scopus_wos", "Scopus & WoS"
-        OTHER_INTL = "other_intl", "Boshqa xalqaro"
+        BOTH = "both", "Scopus va Web of Science"
 
-    class ThesisCategory(models.TextChoices):
-        INTERNATIONAL_CONF = "international_conf", "Xalqaro konferensiya"
-        REPUBLIC_CONF = "republic_conf", "Respublika konferensiyasi"
+    class Quartile(models.TextChoices):
+        Q1 = "Q1", "Q1"
+        Q2 = "Q2", "Q2"
+        Q3 = "Q3", "Q3"
+        Q4 = "Q4", "Q4"
 
-    class PatentCategory(models.TextChoices):
-        INVENTION = "invention", "Ixtiro"
-        UTILITY_MODEL = "utility_model", "Foydali model"
-        INDUSTRIAL_DESIGN = "industrial_design", "Sanoat namunasi"
-        SOFTWARE_CERT = "software_cert", "EHM dasturi guvohnomasi"
+    # --- Theses (report section III) ----------------------------------
+    class ConferenceScope(models.TextChoices):
+        SCOPUS_WOS = "scopus_wos", "Scopus/WoS to'plami"
+        OTHER_FOREIGN = "other_foreign", "Boshqa xorijiy anjuman"
+        CIS = "cis", "MDH anjumani"
+        LOCAL = "local", "Mahalliy anjuman"
 
-    class PatentType(models.TextChoices):
-        LOCAL = "local", "Mahalliy"
+    class LocalConfLevel(models.TextChoices):
+        INTERNATIONAL = "international", "Xalqaro anjuman"
+        REPUBLIC = "republic", "Respublika anjumani"
+
+    # --- Conference participation (report section IV) -----------------
+    class PresentationType(models.TextChoices):
+        ORAL = "oral", "Og'zaki"
+        PLENARY = "plenary", "Plenar"
+
+    class ParticipationScope(models.TextChoices):
         FOREIGN = "foreign", "Xorijiy"
+        REPUBLIC = "republic", "Respublika"
+
+    # --- Other publications (report section V) -------------------------
+    class PublicationType(models.TextChoices):
+        MONOGRAPH = "monograph", "Monografiya"
+        TEXTBOOK = "textbook", "Darslik"
+        MANUAL = "manual", "O'quv qo'llanma"
+
+    # --- Patents / IP (report section VI) -------------------------------
+    class PatentCategory(models.TextChoices):
+        INVENTION = "invention", "Ixtiro (patent)"
+        FOREIGN_PATENT = "foreign_patent", "Xorijiy patent"
+        UTILITY_MODEL = "utility_model", "Foydali modelga patent"
+        PATENT_APPLICATION = "patent_application", "Patent uchun talabnoma"
+        TRADEMARK = "trademark", "Tovar belgisi"
+        SOFTWARE_CERTIFICATE = "software_certificate", "Dasturiy mahsulot guvohnomasi"
+        LICENSE_AGREEMENT = "license_agreement", "Litsenziya shartnomasi"
 
     specialist = models.ForeignKey(SpecialistProfile, on_delete=models.CASCADE, related_name="works")
-    category = models.CharField(max_length=20, choices=Category.choices)
+    category = models.CharField(max_length=30, choices=Category.choices)
 
     # Common fields
     title = models.CharField(max_length=500)
@@ -238,30 +280,54 @@ class ScientificWork(models.Model):
     link = models.URLField(max_length=500, blank=True)
     doi = models.CharField(max_length=255, blank=True)
 
-    file = models.FileField(upload_to=work_upload_path, validators=[validate_uploaded_document])
-    original_filename = models.CharField(max_length=255)
-    size = models.PositiveIntegerField(help_text="File size in bytes")
+    # PDF is required for every category EXCEPT conference_participation
+    # (enforced in the serializer) -- nullable here to allow that exception.
+    file = models.FileField(
+        upload_to=work_upload_path, blank=True, null=True, validators=[validate_uploaded_document]
+    )
+    original_filename = models.CharField(max_length=255, blank=True)
+    size = models.PositiveIntegerField(null=True, blank=True, help_text="File size in bytes")
 
-    # Foreign article (publisher is shared with monograph)
-    publisher = models.CharField(max_length=255, blank=True)
-    index_type = models.CharField(max_length=20, choices=IndexType.choices, blank=True)
+    # Articles: journal_scope drives 2.1-2.4; indexed_in/quartiles only
+    # apply when journal_scope == scopus_wos.
+    journal_scope = models.CharField(max_length=20, choices=JournalScope.choices, blank=True)
+    indexed_in = models.CharField(max_length=10, choices=IndexedIn.choices, blank=True)
+    scopus_quartile = models.CharField(max_length=2, choices=Quartile.choices, blank=True)
+    wos_quartile = models.CharField(max_length=2, choices=Quartile.choices, blank=True)
+    publisher = models.CharField(max_length=255, blank=True)  # also used by other_publication
     impact_factor = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
 
     # Local article / thesis
     journal_name = models.CharField(max_length=255, blank=True)
 
-    # Thesis
-    thesis_category = models.CharField(max_length=30, choices=ThesisCategory.choices, blank=True)
+    # Thesis: conference_scope drives 3.1-3.4; local_conf_level only
+    # applies when conference_scope == local.
+    conference_scope = models.CharField(max_length=20, choices=ConferenceScope.choices, blank=True)
+    local_conf_level = models.CharField(max_length=20, choices=LocalConfLevel.choices, blank=True)
 
-    # Patent
+    # Conference participation (certificate-based, section IV)
+    conference_name = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    event_date = models.DateField(null=True, blank=True)
+    presentation_type = models.CharField(max_length=20, choices=PresentationType.choices, blank=True)
+    participation_scope = models.CharField(max_length=20, choices=ParticipationScope.choices, blank=True)
+
+    # Patent / IP
     patent_category = models.CharField(max_length=30, choices=PatentCategory.choices, blank=True)
-    patent_type = models.CharField(max_length=20, choices=PatentType.choices, blank=True)
     certificate_number = models.CharField(max_length=100, blank=True)
     issued_date = models.DateField(null=True, blank=True)
 
-    # Monograph
+    # Other publications: publication_type drives 5.1/5.3/5.5;
+    # published_abroad additionally flags 5.2/5.4 (a SUBSET, not extra count).
+    publication_type = models.CharField(max_length=20, choices=PublicationType.choices, blank=True)
+    published_abroad = models.BooleanField(default=False)
     isbn = models.CharField(max_length=50, blank=True)
     pages = models.PositiveIntegerField(null=True, blank=True)
+
+    # Derived, indexed -- see specialists/report_codes.py. Empty means
+    # "not yet classifiable" (missing required classification fields);
+    # such records are excluded from report counts and flagged.
+    report_code = models.CharField(max_length=10, blank=True, db_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -269,5 +335,21 @@ class ScientificWork(models.Model):
     class Meta:
         ordering = ["-year", "-created_at"]
 
+    def save(self, *args, **kwargs):
+        from .report_codes import compute_report_code
+
+        self.report_code = compute_report_code(self)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.title} ({self.get_category_display()})"
+
+    @property
+    def report_year(self):
+        """Which calendar year this record counts toward, per category."""
+        if self.category == self.Category.PATENT:
+            return self.issued_date.year if self.issued_date else None
+        if self.category == self.Category.CONFERENCE_PARTICIPATION:
+            return self.event_date.year if self.event_date else None
+        return self.year
+

@@ -86,7 +86,7 @@ class PublicSearchTests(APITestCase):
         self.assertEqual(response.data["works_count"], 0)
         self.assertEqual(
             set(response.data["works_by_category"].keys()),
-            {"foreign_article", "local_article", "thesis", "patent", "monograph"},
+            {"foreign_article", "local_article", "thesis", "conference_participation", "patent", "other_publication"},
         )
 
 
@@ -114,18 +114,61 @@ class ScientificWorkTests(APITestCase):
     def test_foreign_article_with_all_required_fields_succeeds(self):
         response = self.client.post(reverse("my-works-list-create"), {
             "category": "foreign_article", "title": "Test Article", "doi": "10.1/abc",
-            "year": 2024, "authorship": "main_author", "file": self._pdf(),
+            "year": 2024, "authorship": "main_author", "journal_scope": "local", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(self.profile.works.count(), 1)
 
     def test_foreign_article_missing_doi_rejected(self):
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "foreign_article", "title": "Test Article",
+            "category": "foreign_article", "title": "Test Article", "journal_scope": "local",
             "year": 2024, "authorship": "main_author", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("doi", response.data)
+
+    def test_foreign_article_missing_journal_scope_rejected(self):
+        response = self.client.post(reverse("my-works-list-create"), {
+            "category": "foreign_article", "title": "Test Article", "doi": "10.1/abc",
+            "year": 2024, "authorship": "main_author", "file": self._pdf(),
+        }, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("journal_scope", response.data)
+
+    def test_scopus_wos_article_requires_indexed_in_and_quartile(self):
+        response = self.client.post(reverse("my-works-list-create"), {
+            "category": "foreign_article", "title": "T", "doi": "10.1/q",
+            "year": 2024, "authorship": "main_author", "journal_scope": "scopus_wos", "file": self._pdf(),
+        }, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("indexed_in", response.data)
+
+        response2 = self.client.post(reverse("my-works-list-create"), {
+            "category": "foreign_article", "title": "T", "doi": "10.1/q2",
+            "year": 2024, "authorship": "main_author", "journal_scope": "scopus_wos",
+            "indexed_in": "scopus", "file": self._pdf("t2.pdf"),
+        }, format="multipart")
+        self.assertEqual(response2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("scopus_quartile", response2.data)
+
+        response3 = self.client.post(reverse("my-works-list-create"), {
+            "category": "foreign_article", "title": "T", "doi": "10.1/q3",
+            "year": 2024, "authorship": "main_author", "journal_scope": "scopus_wos",
+            "indexed_in": "scopus", "scopus_quartile": "Q1", "file": self._pdf("t3.pdf"),
+        }, format="multipart")
+        self.assertEqual(response3.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response3.data["report_code"], "2.1")
+
+    def test_local_article_journal_scope_forced_to_local(self):
+        response = self.client.post(reverse("my-works-list-create"), {
+            "category": "local_article", "title": "T", "journal_name": "J", "doi": "10.1/local",
+            "year": 2024, "link": "https://example.com", "authorship": "main_author",
+            "journal_scope": "scopus_wos",  # attempt to override -- server should force "local"
+            "file": self._pdf(),
+        }, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["journal_scope"], "local")
+        self.assertEqual(response.data["report_code"], "2.4")
 
     def test_local_article_missing_journal_name_rejected(self):
         response = self.client.post(reverse("my-works-list-create"), {
@@ -146,42 +189,50 @@ class ScientificWorkTests(APITestCase):
     def test_patent_missing_certificate_number_rejected(self):
         response = self.client.post(reverse("my-works-list-create"), {
             "category": "patent", "title": "Test Patent", "patent_category": "invention",
-            "patent_type": "local", "issued_date": "2024-05-01", "authorship": "main_author",
+            "issued_date": "2024-05-01", "authorship": "main_author",
             "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("certificate_number", response.data)
 
-    def test_patent_does_not_require_doi_or_plain_year(self):
+    def test_patent_year_auto_derived_from_issued_date(self):
         response = self.client.post(reverse("my-works-list-create"), {
             "category": "patent", "title": "Test Patent", "patent_category": "invention",
-            "patent_type": "local", "certificate_number": "AB-123",
+            "certificate_number": "AB-123",
             "issued_date": "2024-05-01", "authorship": "main_author", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # year is auto-derived from issued_date for cross-category sorting.
         self.assertEqual(response.data["year"], 2024)
+        self.assertEqual(response.data["report_code"], "6.1")
 
-    def test_monograph_missing_publisher_rejected(self):
+    def test_other_publication_missing_publisher_rejected(self):
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "monograph", "title": "Test Book", "year": 2024,
-            "authorship": "main_author", "file": self._pdf(),
+            "category": "other_publication", "title": "Test Book", "year": 2024,
+            "authorship": "main_author", "publication_type": "monograph", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("publisher", response.data)
 
-    def test_thesis_missing_thesis_category_rejected(self):
+    def test_thesis_missing_conference_scope_rejected(self):
         response = self.client.post(reverse("my-works-list-create"), {
             "category": "thesis", "title": "Test Thesis", "journal_name": "Conf",
             "year": 2024, "authorship": "main_author", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("thesis_category", response.data)
+        self.assertIn("conference_scope", response.data)
+
+    def test_thesis_local_scope_requires_local_conf_level(self):
+        response = self.client.post(reverse("my-works-list-create"), {
+            "category": "thesis", "title": "Test Thesis", "journal_name": "Conf",
+            "year": 2024, "authorship": "main_author", "conference_scope": "local", "file": self._pdf(),
+        }, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("local_conf_level", response.data)
 
     def test_every_category_rejects_submission_without_pdf(self):
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "monograph", "title": "No File", "publisher": "Pub",
-            "year": 2024, "authorship": "main_author",
+            "category": "other_publication", "title": "No File", "publisher": "Pub",
+            "year": 2024, "authorship": "main_author", "publication_type": "monograph",
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("file", response.data)
@@ -189,24 +240,25 @@ class ScientificWorkTests(APITestCase):
     def test_non_pdf_upload_rejected(self):
         fake = SimpleUploadedFile("not-a-pdf.pdf", b"this is definitely not a pdf", content_type="application/pdf")
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "monograph", "title": "Fake", "publisher": "Pub",
-            "year": 2024, "authorship": "main_author", "file": fake,
+            "category": "other_publication", "title": "Fake", "publisher": "Pub",
+            "year": 2024, "authorship": "main_author", "publication_type": "monograph", "file": fake,
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_docx_renamed_to_pdf_fails_magic_byte_check(self):
         fake = SimpleUploadedFile("renamed.pdf", b"PK\x03\x04 this is a docx zip header", content_type="application/pdf")
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "monograph", "title": "Fake", "publisher": "Pub",
-            "year": 2024, "authorship": "main_author", "file": fake,
+            "category": "other_publication", "title": "Fake", "publisher": "Pub",
+            "year": 2024, "authorship": "main_author", "publication_type": "monograph", "file": fake,
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_no_cap_on_work_count(self):
         for i in range(7):
             response = self.client.post(reverse("my-works-list-create"), {
-                "category": "monograph", "title": f"Book {i}", "publisher": "Pub",
-                "year": 2024, "authorship": "main_author", "file": self._pdf(f"book{i}.pdf"),
+                "category": "other_publication", "title": f"Book {i}", "publisher": "Pub",
+                "year": 2024, "authorship": "main_author", "publication_type": "monograph",
+                "file": self._pdf(f"book{i}.pdf"),
             }, format="multipart")
             self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(self.profile.works.count(), 7)
@@ -215,8 +267,8 @@ class ScientificWorkTests(APITestCase):
 
     def _create_work(self, **overrides):
         payload = {
-            "category": "monograph", "title": "Original", "publisher": "Pub",
-            "year": 2024, "authorship": "main_author", "file": self._pdf(),
+            "category": "other_publication", "title": "Original", "publisher": "Pub",
+            "year": 2024, "authorship": "main_author", "publication_type": "monograph", "file": self._pdf(),
         }
         payload.update(overrides)
         response = self.client.post(reverse("my-works-list-create"), payload, format="multipart")
@@ -258,8 +310,9 @@ class ScientificWorkTests(APITestCase):
         other_user.save()
         other_profile = SpecialistProfile.objects.create(user=other_user, department=other_dept)
         other_work = ScientificWork.objects.create(
-            specialist=other_profile, category="monograph", title="Not yours", publisher="Pub",
-            year=2024, authorship="main_author", file=self._pdf(), original_filename="x.pdf", size=10,
+            specialist=other_profile, category="other_publication", title="Not yours", publisher="Pub",
+            year=2024, authorship="main_author", publication_type="monograph",
+            file=self._pdf(), original_filename="x.pdf", size=10,
         )
         response = self.client.delete(reverse("my-work-detail", kwargs={"id": other_work.id}))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -267,17 +320,17 @@ class ScientificWorkTests(APITestCase):
     # --- DOI duplicate confirm flow --------------------------------------
 
     def test_duplicate_doi_same_employee_warns_then_confirm_succeeds(self):
-        self._create_work(category="foreign_article", title="A", publisher="Pub", doi="10.1/dup", year=2024)
+        self._create_work(category="foreign_article", title="A", journal_scope="local", doi="10.1/dup", year=2024)
 
         warn = self.client.post(reverse("my-works-list-create"), {
-            "category": "foreign_article", "title": "B", "doi": "10.1/dup",
+            "category": "foreign_article", "title": "B", "doi": "10.1/dup", "journal_scope": "local",
             "year": 2024, "authorship": "main_author", "file": self._pdf("b.pdf"),
         }, format="multipart")
         self.assertEqual(warn.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(str(warn.data.get("code")[0]), "duplicate_doi")
 
         confirmed = self.client.post(reverse("my-works-list-create"), {
-            "category": "foreign_article", "title": "B", "doi": "10.1/dup",
+            "category": "foreign_article", "title": "B", "doi": "10.1/dup", "journal_scope": "local",
             "year": 2024, "authorship": "main_author", "file": self._pdf("b2.pdf"),
             "confirm_duplicate": "true",
         }, format="multipart")
@@ -285,7 +338,7 @@ class ScientificWorkTests(APITestCase):
         self.assertEqual(self.profile.works.filter(doi="10.1/dup").count(), 2)
 
     def test_duplicate_doi_across_different_employees_is_allowed(self):
-        self._create_work(category="foreign_article", title="A", publisher="Pub", doi="10.1/shared", year=2024)
+        self._create_work(category="foreign_article", title="A", journal_scope="local", doi="10.1/shared", year=2024)
 
         other_dept = Department.objects.create(name="Boshqa2")
         other_user = User.objects.create_user(
@@ -301,7 +354,7 @@ class ScientificWorkTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
 
         response = self.client.post(reverse("my-works-list-create"), {
-            "category": "foreign_article", "title": "Shared DOI work", "doi": "10.1/shared",
+            "category": "foreign_article", "title": "Shared DOI work", "doi": "10.1/shared", "journal_scope": "local",
             "year": 2024, "authorship": "main_author", "file": self._pdf(),
         }, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -324,12 +377,12 @@ class ScientificWorkTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_public_works_endpoint_filters_by_category(self):
-        self._create_work(category="monograph")
+        self._create_work(category="other_publication")
         self._create_work(
-            category="foreign_article", title="FA", publisher="", doi="10.1/cat-filter", year=2024
+            category="foreign_article", title="FA", journal_scope="local", doi="10.1/cat-filter", year=2024
         )
         response = self.client.get(
-            reverse("specialist-works-public", kwargs={"id": self.user.id}), {"category": "monograph"}
+            reverse("specialist-works-public", kwargs={"id": self.user.id}), {"category": "other_publication"}
         )
         self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["category"], "monograph")
+        self.assertEqual(response.data["results"][0]["category"], "other_publication")

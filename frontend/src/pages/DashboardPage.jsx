@@ -8,6 +8,7 @@ import {
   POSITIONS,
   specialistsApi,
 } from "../api/endpoints";
+import ReportSection from "../components/ReportSection.jsx";
 import ScientificWorksManager from "../components/ScientificWorksManager.jsx";
 import uz from "../i18n/uz.js";
 
@@ -225,6 +226,7 @@ export default function DashboardPage() {
       </div>
 
       <ScientificWorksManager />
+      <ReportSection />
     </div>
   );
 }

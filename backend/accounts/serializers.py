@@ -217,6 +217,7 @@ class MeSerializer(serializers.ModelSerializer):
             "full_name",
             "is_email_verified",
             "has_profile",
+            "is_staff",
         ]
 
     def get_has_profile(self, obj):

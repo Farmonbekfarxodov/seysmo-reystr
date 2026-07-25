@@ -11,6 +11,7 @@ import HomePage from "./pages/HomePage.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
 import SpecialistDetailPage from "./pages/SpecialistDetailPage.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
+import AdminReportPage from "./pages/AdminReportPage.jsx";
 
 export default function App() {
   const { user, logout } = useAuth();
@@ -46,6 +47,14 @@ export default function App() {
               >
                 {uz.dashboard.title}
               </Link>
+              {user.is_staff && (
+                <Link
+                  to="/admin-report"
+                  className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition hover:border-sand"
+                >
+                  Institut hisoboti
+                </Link>
+              )}
               <button
                 onClick={handleLogout}
                 className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition hover:border-sand"
@@ -81,6 +90,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin-report"
+            element={
+              <ProtectedRoute staffOnly>
+                <AdminReportPage />
               </ProtectedRoute>
             }
           />

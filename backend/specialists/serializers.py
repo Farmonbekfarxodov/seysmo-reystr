@@ -151,19 +151,26 @@ class MySpecialistProfileSerializer(serializers.ModelSerializer):
 
 class ScientificWorkSerializer(serializers.ModelSerializer):
     """Read/write serializer for a single scientific work. Required fields
-    differ per category (see CATEGORY_REQUIRED_FIELDS); the PDF file is
-    required on create, optional (replace-only, never removable) on
-    update. A same-employee DOI duplicate raises a soft, confirmable
-    warning unless the client passes confirm_duplicate=true."""
+    differ per category (see CATEGORY_REQUIRED_FIELDS, plus the
+    conditional rules in validate() for the article quartile fields and
+    the thesis local-conference level). The PDF file is required on
+    create for every category EXCEPT conference_participation, and is
+    always replace-only (never removable) on update. A same-employee DOI
+    duplicate raises a soft, confirmable warning unless the client passes
+    confirm_duplicate=true."""
 
-    file = serializers.FileField(required=False)
+    file = serializers.FileField(required=False, allow_null=True)
     confirm_duplicate = serializers.BooleanField(write_only=True, required=False, default=False)
     category_display = serializers.CharField(source="get_category_display", read_only=True)
     authorship_display = serializers.CharField(source="get_authorship_display", read_only=True)
-    index_type_display = serializers.CharField(source="get_index_type_display", read_only=True)
-    thesis_category_display = serializers.CharField(source="get_thesis_category_display", read_only=True)
+    journal_scope_display = serializers.CharField(source="get_journal_scope_display", read_only=True)
+    indexed_in_display = serializers.CharField(source="get_indexed_in_display", read_only=True)
+    conference_scope_display = serializers.CharField(source="get_conference_scope_display", read_only=True)
+    local_conf_level_display = serializers.CharField(source="get_local_conf_level_display", read_only=True)
+    presentation_type_display = serializers.CharField(source="get_presentation_type_display", read_only=True)
+    participation_scope_display = serializers.CharField(source="get_participation_scope_display", read_only=True)
+    publication_type_display = serializers.CharField(source="get_publication_type_display", read_only=True)
     patent_category_display = serializers.CharField(source="get_patent_category_display", read_only=True)
-    patent_type_display = serializers.CharField(source="get_patent_type_display", read_only=True)
 
     class Meta:
         model = ScientificWork
@@ -181,39 +188,62 @@ class ScientificWorkSerializer(serializers.ModelSerializer):
             "file",
             "original_filename",
             "size",
+            # Articles
+            "journal_scope",
+            "journal_scope_display",
+            "indexed_in",
+            "indexed_in_display",
+            "scopus_quartile",
+            "wos_quartile",
             "publisher",
-            "index_type",
-            "index_type_display",
             "impact_factor",
             "journal_name",
-            "thesis_category",
-            "thesis_category_display",
+            # Thesis
+            "conference_scope",
+            "conference_scope_display",
+            "local_conf_level",
+            "local_conf_level_display",
+            # Conference participation
+            "conference_name",
+            "location",
+            "event_date",
+            "presentation_type",
+            "presentation_type_display",
+            "participation_scope",
+            "participation_scope_display",
+            # Patent / IP
             "patent_category",
             "patent_category_display",
-            "patent_type",
-            "patent_type_display",
             "certificate_number",
             "issued_date",
+            # Other publications
+            "publication_type",
+            "publication_type_display",
+            "published_abroad",
             "isbn",
             "pages",
+            # Derived / meta
+            "report_code",
             "created_at",
             "updated_at",
             "confirm_duplicate",
         ]
-        read_only_fields = ["id", "original_filename", "size", "created_at", "updated_at"]
+        read_only_fields = ["id", "original_filename", "size", "report_code", "created_at", "updated_at"]
 
     CATEGORY_REQUIRED_FIELDS = {
-        ScientificWork.Category.FOREIGN_ARTICLE: ["title", "doi", "year", "authorship"],
-        ScientificWork.Category.LOCAL_ARTICLE: [
-            "title", "journal_name", "doi", "year", "link", "authorship"
-        ],
-        ScientificWork.Category.THESIS: [
-            "title", "journal_name", "thesis_category", "year", "authorship"
+        ScientificWork.Category.FOREIGN_ARTICLE: ["title", "doi", "year", "authorship", "journal_scope"],
+        ScientificWork.Category.LOCAL_ARTICLE: ["title", "journal_name", "doi", "year", "link", "authorship"],
+        ScientificWork.Category.THESIS: ["title", "journal_name", "year", "authorship", "conference_scope"],
+        ScientificWork.Category.CONFERENCE_PARTICIPATION: [
+            "title", "conference_name", "location", "event_date",
+            "presentation_type", "participation_scope", "authorship",
         ],
         ScientificWork.Category.PATENT: [
-            "title", "patent_category", "patent_type", "certificate_number", "issued_date", "authorship"
+            "title", "patent_category", "certificate_number", "issued_date", "authorship"
         ],
-        ScientificWork.Category.MONOGRAPH: ["title", "publisher", "year", "authorship"],
+        ScientificWork.Category.OTHER_PUBLICATION: [
+            "title", "publisher", "year", "authorship", "publication_type"
+        ],
     }
 
     FIELD_LABELS = {
@@ -223,12 +253,22 @@ class ScientificWorkSerializer(serializers.ModelSerializer):
         "authorship": "Muallifligi",
         "journal_name": "Jurnal nomi",
         "link": "Havola",
-        "thesis_category": "Kategoriya",
+        "journal_scope": "Jurnal turi",
+        "indexed_in": "Indekslangan baza",
+        "scopus_quartile": "Scopus kvartili",
+        "wos_quartile": "Web of Science kvartili",
+        "conference_scope": "Anjuman turi",
+        "local_conf_level": "Anjuman darajasi",
+        "conference_name": "Anjuman nomi",
+        "location": "Joyi",
+        "event_date": "Sana",
+        "presentation_type": "Ma'ruza turi",
+        "participation_scope": "Qamrovi",
         "patent_category": "Hujjat kategoriyasi",
-        "patent_type": "Hujjat turi",
         "certificate_number": "Guvohnoma raqami",
         "issued_date": "Berilgan sanasi",
         "publisher": "Nashriyot",
+        "publication_type": "Nashr turi",
     }
 
     def _current_value(self, attrs, field):
@@ -239,15 +279,42 @@ class ScientificWorkSerializer(serializers.ModelSerializer):
         return None
 
     def validate_file(self, value):
-        validate_uploaded_document(value)
+        if value is not None:
+            validate_uploaded_document(value)
         return value
 
     def validate(self, attrs):
         confirm_duplicate = attrs.pop("confirm_duplicate", False)
 
         category = self._current_value(attrs, "category")
-        required = self.CATEGORY_REQUIRED_FIELDS.get(category, [])
+
+        # local_article's journal_scope is always "local" -- not a user
+        # choice, enforced server-side regardless of what was submitted.
+        if category == ScientificWork.Category.LOCAL_ARTICLE:
+            attrs["journal_scope"] = ScientificWork.JournalScope.LOCAL
+
+        required = list(self.CATEGORY_REQUIRED_FIELDS.get(category, []))
         errors = {}
+
+        # Conditional requirements layered on top of the static list.
+        if category in (ScientificWork.Category.FOREIGN_ARTICLE, ScientificWork.Category.LOCAL_ARTICLE):
+            journal_scope = self._current_value(attrs, "journal_scope")
+            if journal_scope == ScientificWork.JournalScope.SCOPUS_WOS:
+                indexed_in = self._current_value(attrs, "indexed_in")
+                if not indexed_in:
+                    errors["indexed_in"] = f"{self.FIELD_LABELS['indexed_in']} majburiy."
+                else:
+                    if indexed_in in ("scopus", "both") and not self._current_value(attrs, "scopus_quartile"):
+                        errors["scopus_quartile"] = "Scopus kvartili majburiy."
+                    if indexed_in in ("wos", "both") and not self._current_value(attrs, "wos_quartile"):
+                        errors["wos_quartile"] = "Web of Science kvartili majburiy."
+
+        if category == ScientificWork.Category.THESIS:
+            conference_scope = self._current_value(attrs, "conference_scope")
+            if conference_scope == ScientificWork.ConferenceScope.LOCAL:
+                if not self._current_value(attrs, "local_conf_level"):
+                    errors["local_conf_level"] = f"{self.FIELD_LABELS['local_conf_level']} majburiy."
+
         for field in required:
             value = self._current_value(attrs, field)
             if value in (None, ""):
@@ -255,7 +322,13 @@ class ScientificWorkSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
-        if self.instance is None and not attrs.get("file"):
+        # PDF required on create for every category EXCEPT conference
+        # participation (certificate may arrive later).
+        if (
+            self.instance is None
+            and category != ScientificWork.Category.CONFERENCE_PARTICIPATION
+            and not attrs.get("file")
+        ):
             raise serializers.ValidationError({"file": "PDF fayl yuklash majburiy."})
 
         doi = self._current_value(attrs, "doi")
@@ -275,14 +348,12 @@ class ScientificWorkSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         specialist = self.context["specialist"]
-        file = validated_data.pop("file")
-        work = ScientificWork.objects.create(
-            specialist=specialist,
-            original_filename=file.name,
-            size=file.size,
-            file=file,
-            **validated_data,
-        )
+        file = validated_data.pop("file", None)
+        if file is not None:
+            validated_data["original_filename"] = file.name
+            validated_data["size"] = file.size
+            validated_data["file"] = file
+        work = ScientificWork.objects.create(specialist=specialist, **validated_data)
         self._sync_year_from_issued_date(work)
         return work
 

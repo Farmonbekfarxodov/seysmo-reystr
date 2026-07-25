@@ -5,7 +5,7 @@ const COLUMN_DEFS = {
     { key: "title", label: "Maqola nomi" },
     { key: "publisher", label: "Nashriyot" },
     { key: "doi", label: "DOI", type: "doi" },
-    { key: "index_type_display", label: "Turi" },
+    { key: "journal_scope_display", label: "Turi" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)" },
     { key: "impact_factor", label: "Impakt-faktor" },
     { key: "year", label: "Yili", sortable: true, sortKey: "year" },
@@ -23,24 +23,33 @@ const COLUMN_DEFS = {
   thesis: [
     { key: "title", label: "Maqola nomi" },
     { key: "journal_name", label: "Jurnal nomi" },
-    { key: "thesis_category_display", label: "Kategoriya" },
+    { key: "conference_scope_display", label: "Kategoriya" },
     { key: "doi", label: "DOI", type: "doi" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)" },
     { key: "year", label: "Yili", sortable: true, sortKey: "year" },
     { key: "link", label: "Havola", type: "link" },
     { key: "authorship_display", label: "Muallifligi" },
   ],
+  conference_participation: [
+    { key: "title", label: "Ma'ruza mavzusi" },
+    { key: "conference_name", label: "Anjuman nomi" },
+    { key: "location", label: "Joyi" },
+    { key: "event_date", label: "Sana", sortable: true, sortKey: "event_date", type: "date" },
+    { key: "presentation_type_display", label: "Ma'ruza turi" },
+    { key: "participation_scope_display", label: "Qamrovi" },
+    { key: "authorship_display", label: "Muallifligi" },
+  ],
   patent: [
     { key: "patent_category_display", label: "Hujjat kategoriyasi" },
-    { key: "patent_type_display", label: "Hujjat turi" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)" },
     { key: "title", label: "Hujjat nomi" },
     { key: "certificate_number", label: "Guvohnoma raqami" },
     { key: "issued_date", label: "Berilgan yili", sortable: true, sortKey: "issued_date", type: "date" },
     { key: "authorship_display", label: "Muallifligi" },
   ],
-  monograph: [
+  other_publication: [
     { key: "title", label: "Nomi" },
+    { key: "publication_type_display", label: "Nashr turi" },
     { key: "publisher", label: "Nashriyot" },
     { key: "isbn", label: "ISBN" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)" },
@@ -164,15 +173,21 @@ export default function WorksTable({ category, rows, sortField, sortDir, onSortC
               ))}
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="flex items-center justify-end gap-3 text-ink-soft">
-                  <a
-                    href={row.file}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="PDF yuklab olish"
-                    className="transition hover:text-sand-dark"
-                  >
-                    <DownloadIcon />
-                  </a>
+                  {row.file ? (
+                    <a
+                      href={row.file}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="PDF yuklab olish"
+                      className="transition hover:text-sand-dark"
+                    >
+                      <DownloadIcon />
+                    </a>
+                  ) : (
+                    <span className="rounded-full bg-warning-tint px-2.5 py-1 text-xs font-medium text-warning">
+                      Sertifikat yuklanmagan
+                    </span>
+                  )}
                   {showActions && (
                     <>
                       <button

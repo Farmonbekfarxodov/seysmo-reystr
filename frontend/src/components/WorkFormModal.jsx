@@ -2,15 +2,22 @@ import React, { useRef, useState } from "react";
 
 import {
   AUTHORSHIP_OPTIONS,
+  CONFERENCE_SCOPE_OPTIONS,
   errorCode,
   flattenApiErrors,
-  INDEX_TYPE_OPTIONS,
+  INDEXED_IN_OPTIONS,
+  JOURNAL_SCOPE_OPTIONS,
+  LOCAL_CONF_LEVEL_OPTIONS,
+  PARTICIPATION_SCOPE_OPTIONS,
   PATENT_CATEGORY_OPTIONS,
-  PATENT_TYPE_OPTIONS,
-  THESIS_CATEGORY_OPTIONS,
+  PRESENTATION_TYPE_OPTIONS,
+  PUBLICATION_TYPE_OPTIONS,
+  QUARTILE_OPTIONS,
   worksApi,
 } from "../api/endpoints";
 import Modal from "./Modal.jsx";
+
+const NO_FILE_REQUIRED_CATEGORY = "conference_participation";
 
 const FIELD_CONFIGS = {
   foreign_article: [
@@ -18,8 +25,22 @@ const FIELD_CONFIGS = {
     { key: "doi", label: "DOI", type: "text", required: true },
     { key: "year", label: "Yili", type: "year", required: true },
     { key: "authorship", label: "Muallifligi", type: "select", required: true, options: AUTHORSHIP_OPTIONS },
+    { key: "journal_scope", label: "Jurnal turi", type: "select", required: true, options: JOURNAL_SCOPE_OPTIONS },
+    {
+      key: "indexed_in", label: "Indekslangan baza", type: "select", options: INDEXED_IN_OPTIONS,
+      showIf: (f) => f.journal_scope === "scopus_wos", requiredIf: (f) => f.journal_scope === "scopus_wos",
+    },
+    {
+      key: "scopus_quartile", label: "Scopus kvartili", type: "select", options: QUARTILE_OPTIONS,
+      showIf: (f) => f.journal_scope === "scopus_wos" && ["scopus", "both"].includes(f.indexed_in),
+      requiredIf: (f) => f.journal_scope === "scopus_wos" && ["scopus", "both"].includes(f.indexed_in),
+    },
+    {
+      key: "wos_quartile", label: "Web of Science kvartili", type: "select", options: QUARTILE_OPTIONS,
+      showIf: (f) => f.journal_scope === "scopus_wos" && ["wos", "both"].includes(f.indexed_in),
+      requiredIf: (f) => f.journal_scope === "scopus_wos" && ["wos", "both"].includes(f.indexed_in),
+    },
     { key: "publisher", label: "Nashriyot", type: "text" },
-    { key: "index_type", label: "Turi", type: "select", options: INDEX_TYPE_OPTIONS },
     { key: "impact_factor", label: "Impakt-faktor", type: "number" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)", type: "text", span: 2 },
   ],
@@ -35,27 +56,42 @@ const FIELD_CONFIGS = {
   thesis: [
     { key: "title", label: "Maqola nomi", type: "text", required: true, span: 2 },
     { key: "journal_name", label: "Jurnal/Konferensiya nomi", type: "text", required: true },
-    { key: "thesis_category", label: "Kategoriya", type: "select", required: true, options: THESIS_CATEGORY_OPTIONS },
+    { key: "conference_scope", label: "Anjuman turi", type: "select", required: true, options: CONFERENCE_SCOPE_OPTIONS },
+    {
+      key: "local_conf_level", label: "Anjuman darajasi", type: "select", options: LOCAL_CONF_LEVEL_OPTIONS,
+      showIf: (f) => f.conference_scope === "local", requiredIf: (f) => f.conference_scope === "local",
+    },
     { key: "year", label: "Yili", type: "year", required: true },
     { key: "authorship", label: "Muallifligi", type: "select", required: true, options: AUTHORSHIP_OPTIONS },
     { key: "doi", label: "DOI", type: "text" },
     { key: "link", label: "Havola", type: "url" },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)", type: "text", span: 2 },
   ],
+  conference_participation: [
+    { key: "title", label: "Ma'ruza mavzusi", type: "text", required: true, span: 2 },
+    { key: "conference_name", label: "Anjuman nomi", type: "text", required: true },
+    { key: "location", label: "Joyi (shahar/davlat)", type: "text", required: true },
+    { key: "event_date", label: "Sana", type: "date", required: true },
+    { key: "presentation_type", label: "Ma'ruza turi", type: "select", required: true, options: PRESENTATION_TYPE_OPTIONS },
+    { key: "participation_scope", label: "Qamrovi", type: "select", required: true, options: PARTICIPATION_SCOPE_OPTIONS },
+    { key: "authorship", label: "Muallifligi", type: "select", required: true, options: AUTHORSHIP_OPTIONS },
+    { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)", type: "text", span: 2 },
+  ],
   patent: [
     { key: "title", label: "Hujjat nomi", type: "text", required: true, span: 2 },
     { key: "patent_category", label: "Hujjat kategoriyasi", type: "select", required: true, options: PATENT_CATEGORY_OPTIONS },
-    { key: "patent_type", label: "Hujjat turi", type: "select", required: true, options: PATENT_TYPE_OPTIONS },
     { key: "certificate_number", label: "Guvohnoma raqami", type: "text", required: true },
     { key: "issued_date", label: "Berilgan sanasi", type: "date", required: true },
     { key: "authorship", label: "Muallifligi", type: "select", required: true, options: AUTHORSHIP_OPTIONS },
     { key: "project_name", label: "Loyiha doirasida (Loyiha nomi)", type: "text", span: 2 },
   ],
-  monograph: [
+  other_publication: [
     { key: "title", label: "Nomi", type: "text", required: true, span: 2 },
+    { key: "publication_type", label: "Nashr turi", type: "select", required: true, options: PUBLICATION_TYPE_OPTIONS },
     { key: "publisher", label: "Nashriyot", type: "text", required: true },
     { key: "year", label: "Yili", type: "year", required: true },
     { key: "authorship", label: "Muallifligi", type: "select", required: true, options: AUTHORSHIP_OPTIONS },
+    { key: "published_abroad", label: "Xorijda chiqqan", type: "checkbox" },
     { key: "isbn", label: "ISBN", type: "text" },
     { key: "pages", label: "Sahifalar soni", type: "number" },
     { key: "link", label: "Havola", type: "url" },
@@ -67,15 +103,20 @@ const CATEGORY_TITLES = {
   foreign_article: "Xorijiy maqola",
   local_article: "Mahalliy maqola",
   thesis: "Tezis",
+  conference_participation: "Anjumanda ishtirok",
   patent: "Patent",
-  monograph: "Monografiya",
+  other_publication: "Boshqa nashr",
 };
 
 function initialFormFor(category, work) {
   const fields = FIELD_CONFIGS[category];
   const form = {};
   fields.forEach((f) => {
-    form[f.key] = work?.[f.key] ?? "";
+    if (f.type === "checkbox") {
+      form[f.key] = work?.[f.key] ?? false;
+    } else {
+      form[f.key] = work?.[f.key] ?? "";
+    }
   });
   return form;
 }
@@ -83,6 +124,7 @@ function initialFormFor(category, work) {
 export default function WorkFormModal({ category, work, projectNameSuggestions = [], onClose, onSaved }) {
   const isEditing = !!work;
   const fields = FIELD_CONFIGS[category];
+  const fileOptional = category === NO_FILE_REQUIRED_CATEGORY;
 
   const [form, setForm] = useState(() => initialFormFor(category, work));
   const [pdfFile, setPdfFile] = useState(null);
@@ -96,6 +138,16 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
 
   function update(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function visibleFields() {
+    return fields.filter((f) => !f.showIf || f.showIf(form));
+  }
+
+  function isRequired(f) {
+    if (f.required) return true;
+    if (f.requiredIf) return f.requiredIf(form);
+    return false;
   }
 
   function handleFileSelect(file) {
@@ -121,15 +173,18 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
   function buildPayload() {
     const payload = { category, ...form };
     if (pdfFile) payload.file = pdfFile;
+    if (typeof payload.published_abroad === "boolean") {
+      payload.published_abroad = payload.published_abroad ? "true" : "false";
+    }
     return payload;
   }
 
   function validateClientSide() {
     const errors = {};
-    fields.forEach((f) => {
-      if (f.required && !form[f.key]) errors[f.key] = `${f.label} majburiy.`;
+    visibleFields().forEach((f) => {
+      if (isRequired(f) && !form[f.key]) errors[f.key] = `${f.label} majburiy.`;
     });
-    if (!isEditing && !pdfFile) errors.file = "PDF fayl yuklash majburiy.";
+    if (!isEditing && !fileOptional && !pdfFile) errors.file = "PDF fayl yuklash majburiy.";
     return errors;
   }
 
@@ -229,78 +284,92 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {fields.map((f) => (
+          {visibleFields().map((f) => (
             <div key={f.key} className={`flex flex-col gap-1.5 ${f.span === 2 ? "sm:col-span-2" : ""}`}>
-              <label htmlFor={`work-${f.key}`} className={labelClass}>
-                {f.label} {f.required && <span className="text-danger">*</span>}
-              </label>
-
-              {f.type === "select" ? (
-                <select
-                  id={`work-${f.key}`}
-                  className={inputClass}
-                  value={form[f.key]}
-                  onChange={(e) => update(f.key, e.target.value)}
-                >
-                  <option value="">Tanlang…</option>
-                  {f.options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              ) : f.type === "year" ? (
-                <input
-                  id={`work-${f.key}`}
-                  type="number"
-                  min="1900"
-                  max="2100"
-                  step="1"
-                  className={inputClass}
-                  value={form[f.key]}
-                  onChange={(e) => update(f.key, e.target.value)}
-                />
-              ) : f.type === "date" ? (
-                <input
-                  id={`work-${f.key}`}
-                  type="date"
-                  className={inputClass}
-                  value={form[f.key]}
-                  onChange={(e) => update(f.key, e.target.value)}
-                />
-              ) : f.type === "number" ? (
-                <input
-                  id={`work-${f.key}`}
-                  type="number"
-                  step="any"
-                  className={inputClass}
-                  value={form[f.key]}
-                  onChange={(e) => update(f.key, e.target.value)}
-                />
-              ) : f.key === "project_name" ? (
-                <>
+              {f.type === "checkbox" ? (
+                <label className="flex items-center gap-2 text-sm font-medium text-ink-soft">
                   <input
-                    id={`work-${f.key}`}
-                    type="text"
-                    list="project-name-suggestions"
-                    className={inputClass}
-                    value={form[f.key]}
-                    onChange={(e) => update(f.key, e.target.value)}
+                    type="checkbox"
+                    checked={!!form[f.key]}
+                    onChange={(e) => update(f.key, e.target.checked)}
+                    className="h-4 w-4 rounded border-line-strong"
                   />
-                  <datalist id="project-name-suggestions">
-                    {projectNameSuggestions.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
-                </>
+                  {f.label}
+                </label>
               ) : (
-                <input
-                  id={`work-${f.key}`}
-                  type={f.type === "url" ? "url" : "text"}
-                  className={inputClass}
-                  value={form[f.key]}
-                  onChange={(e) => update(f.key, e.target.value)}
-                />
+                <>
+                  <label htmlFor={`work-${f.key}`} className={labelClass}>
+                    {f.label} {isRequired(f) && <span className="text-danger">*</span>}
+                  </label>
+
+                  {f.type === "select" ? (
+                    <select
+                      id={`work-${f.key}`}
+                      className={inputClass}
+                      value={form[f.key]}
+                      onChange={(e) => update(f.key, e.target.value)}
+                    >
+                      <option value="">Tanlang…</option>
+                      {f.options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.type === "year" ? (
+                    <input
+                      id={`work-${f.key}`}
+                      type="number"
+                      min="1900"
+                      max="2100"
+                      step="1"
+                      className={inputClass}
+                      value={form[f.key]}
+                      onChange={(e) => update(f.key, e.target.value)}
+                    />
+                  ) : f.type === "date" ? (
+                    <input
+                      id={`work-${f.key}`}
+                      type="date"
+                      className={inputClass}
+                      value={form[f.key]}
+                      onChange={(e) => update(f.key, e.target.value)}
+                    />
+                  ) : f.type === "number" ? (
+                    <input
+                      id={`work-${f.key}`}
+                      type="number"
+                      step="any"
+                      className={inputClass}
+                      value={form[f.key]}
+                      onChange={(e) => update(f.key, e.target.value)}
+                    />
+                  ) : f.key === "project_name" ? (
+                    <>
+                      <input
+                        id={`work-${f.key}`}
+                        type="text"
+                        list="project-name-suggestions"
+                        className={inputClass}
+                        value={form[f.key]}
+                        onChange={(e) => update(f.key, e.target.value)}
+                      />
+                      <datalist id="project-name-suggestions">
+                        {projectNameSuggestions.map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                    </>
+                  ) : (
+                    <input
+                      id={`work-${f.key}`}
+                      type={f.type === "url" ? "url" : "text"}
+                      className={inputClass}
+                      value={form[f.key]}
+                      onChange={(e) => update(f.key, e.target.value)}
+                    />
+                  )}
+                </>
               )}
 
               {fieldErrors[f.key] && <span className="text-xs text-danger">{fieldErrors[f.key]}</span>}
@@ -310,7 +379,8 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
 
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>
-            Pdf yuklash <span className="text-danger">*</span>
+            Pdf yuklash {!fileOptional && <span className="text-danger">*</span>}
+            {fileOptional && <span className="text-ink-faint"> ({"ixtiyoriy — sertifikat keyinroq ham qo'shilishi mumkin"})</span>}
           </label>
           <div
             onDragOver={(e) => {
@@ -347,7 +417,7 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
             ) : (
               <>
                 <p className="text-sm text-ink-soft">PDF faylni shu yerga tashlang yoki bosing</p>
-                <p className="text-xs text-ink-faint">Faqat .pdf</p>
+                <p className="text-xs text-ink-faint">Faqat .pdf{fileOptional ? " (ixtiyoriy)" : ""}</p>
               </>
             )}
           </div>
@@ -360,6 +430,12 @@ export default function WorkFormModal({ category, work, projectNameSuggestions =
           />
           {fieldErrors.file && <span className="text-xs text-danger">{fieldErrors.file}</span>}
         </div>
+
+        {category === NO_FILE_REQUIRED_CATEGORY && !pdfFile && !(isEditing && work.original_filename) && (
+          <p className="text-xs text-ink-faint">
+            Sertifikat hozircha yuklanmasa, ro'yxatda "Sertifikat yuklanmagan" belgisi bilan ko'rinadi.
+          </p>
+        )}
 
         <div className="mt-2 flex justify-end gap-3">
           <button

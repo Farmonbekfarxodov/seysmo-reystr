@@ -22,11 +22,12 @@ class SpecialistFilter(django_filters.FilterSet):
 
 class ScientificWorkFilter(django_filters.FilterSet):
     category = django_filters.ChoiceFilter(choices=ScientificWork.Category.choices)
+    report_code = django_filters.CharFilter(field_name="report_code", lookup_expr="exact")
     search = django_filters.CharFilter(method="filter_search")
 
     class Meta:
         model = ScientificWork
-        fields = ["category", "search"]
+        fields = ["category", "report_code", "search"]
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(title__icontains=value)
